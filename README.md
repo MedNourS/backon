@@ -5,7 +5,7 @@
 A small backend toolkit for Bun, published as two packages:
 
 - **[`@mednours/backon`](packages/backon)** — an opinionated wrapper over Hono (default) or Express (via `@mednours/backon/express`), with baked-in security headers, CORS, request logging, body size limits, Zod-validated routes, and consistent error handling.
-- **[`create-backon`](packages/create-backon)** — a CLI that scaffolds a new project on `@mednours/backon`, prompting for a database (Neon / Postgres / SQLite / none, via Drizzle) and routes, and generating a controller/routes/services layout per route. Currently generates a Hono-backed project; a framework prompt for Express is planned.
+- **[`create-backon`](packages/create-backon)** — a CLI that scaffolds a new project on `@mednours/backon`, prompting for a framework (Hono / Express), a database (Neon / Postgres / SQLite / none, via Drizzle), and routes, and generating a controller/routes/services layout per route.
 
 ## Quick start
 

@@ -1,9 +1,11 @@
 import * as p from "@clack/prompts";
 
 export type DbChoice = "neon" | "postgres" | "sqlite" | "none";
+export type Framework = "hono" | "express";
 
 export interface Answers {
   projectName: string;
+  framework: Framework;
   db: DbChoice;
   routes: string[];
 }
@@ -35,6 +37,15 @@ export async function runPrompts(): Promise<Answers> {
   });
   if (p.isCancel(projectName)) bail();
 
+  const framework = await p.select({
+    message: "Framework",
+    options: [
+      { value: "hono", label: "Hono", hint: "faster, runs anywhere — Bun, edge, serverless" },
+      { value: "express", label: "Express" },
+    ],
+  });
+  if (p.isCancel(framework)) bail();
+
   const db = await p.select({
     message: "Database",
     options: [
@@ -51,8 +62,8 @@ export async function runPrompts(): Promise<Answers> {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const name = await p.text({
-      message: routes.length === 0 ? "Route name (e.g. telemetry)" : "Another route? (blank to finish)",
-      placeholder: routes.length === 0 ? "telemetry" : "",
+      message: routes.length === 0 ? "Route name" : "Another route? (blank to finish)",
+      placeholder: routes.length === 0 ? "e.g. users" : "",
     });
     if (p.isCancel(name)) bail();
     if (!name) break;
@@ -63,6 +74,7 @@ export async function runPrompts(): Promise<Answers> {
 
   return {
     projectName: projectName as string,
+    framework: framework as Framework,
     db: db as DbChoice,
     routes,
   };

@@ -34,23 +34,23 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
   const filesWritten: string[] = [];
 
   const files: Array<[string, string]> = [
-    [join(root, "index.ts"), renderIndexTs()],
+    [join(root, "index.ts"), renderIndexTs(answers.framework)],
     [join(root, ".env.example"), renderEnvExample(answers.db)],
-    [join(root, "package.json"), renderPackageJson(answers.projectName, answers.db)],
+    [join(root, "package.json"), renderPackageJson(answers.projectName, answers.framework, answers.db)],
     [join(root, "tsconfig.json"), renderTsconfig()],
     [join(root, "README.md"), renderReadme(answers)],
     [join(root, ".gitignore"), "node_modules/\ndist/\n*.log\n.env\n.env.local\n"],
-    [join(root, "src/app.ts"), renderAppTs()],
+    [join(root, "src/app.ts"), renderAppTs(answers.framework)],
     [join(root, "src/config/db.ts"), renderDbFile(answers.db)],
-    [join(root, "src/middleware/example.middleware.ts"), renderExampleMiddleware()],
-    [join(root, "src/endpoints/index.ts"), renderEndpointsIndex(answers.routes)],
+    [join(root, "src/middleware/example.middleware.ts"), renderExampleMiddleware(answers.framework)],
+    [join(root, "src/endpoints/index.ts"), renderEndpointsIndex(answers.framework, answers.routes)],
   ];
 
   for (const route of answers.routes) {
     const dir = join(root, "src/endpoints", route);
     files.push(
-      [join(dir, `${route}.controller.ts`), renderController(route)],
-      [join(dir, `${route}.routes.ts`), renderRoutes(route)],
+      [join(dir, `${route}.controller.ts`), renderController(route, answers.framework)],
+      [join(dir, `${route}.routes.ts`), renderRoutes(route, answers.framework)],
       [join(dir, `${route}.services.ts`), renderServices(route)]
     );
   }

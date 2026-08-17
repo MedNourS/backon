@@ -2,9 +2,8 @@
 
 Scaffolds a new backend project on [@mednours/backon](https://www.npmjs.com/package/@mednours/backon) —
 like `bun create vite@latest`, but for a consistent controller/routes/services
-backend layout. Currently generates a Hono-backed project; `@mednours/backon`
-also has an Express adapter, but this CLI doesn't have a framework prompt for
-it yet.
+backend layout. Prompts for Hono or Express and generates the matching
+project either way.
 
 ## Usage
 
@@ -18,8 +17,9 @@ Or, without the `bun create` shorthand:
 bunx create-backon
 ```
 
-Prompts for a project name, a database (Neon, Postgres, SQLite, or none — via
-[Drizzle](https://orm.drizzle.team)), and any number of routes, then generates:
+Prompts for a project name, a framework (Hono or Express), a database (Neon,
+Postgres, SQLite, or none — via [Drizzle](https://orm.drizzle.team)), and any
+number of routes, then generates:
 
 ```
 my-api/
@@ -38,9 +38,10 @@ my-api/
 ```
 
 Each route's `*.routes.ts` wires HTTP methods to controller functions,
-`*.controller.ts` validates the request via `@mednours/backon`'s
-`defineRoute` and calls into `*.services.ts`, which is where real data
-access belongs.
+`*.controller.ts` validates the request via `defineRoute` (from
+`@mednours/backon` or `@mednours/backon/express`, depending on the
+framework you picked) and calls into `*.services.ts`, which is where real
+data access belongs.
 
 ## Requirements
 

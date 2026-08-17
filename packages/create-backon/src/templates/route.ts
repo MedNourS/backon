@@ -1,3 +1,5 @@
+import type { Framework } from "../prompts";
+
 function pascalCase(name: string): string {
   return name
     .split("-")
@@ -5,10 +7,11 @@ function pascalCase(name: string): string {
     .join("");
 }
 
-export function renderController(route: string): string {
+export function renderController(route: string, framework: Framework): string {
   const Route = pascalCase(route);
+  const backonImport = framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
   return `import { z } from "zod";
-import { defineRoute } from "@mednours/backon";
+import { defineRoute } from "${backonImport}";
 import * as service from "./${route}.services";
 
 export const list = defineRoute({}, async (c) => {
@@ -26,8 +29,18 @@ export const create = defineRoute({ body: create${Route}Schema }, async (c, { bo
 `;
 }
 
-export function renderRoutes(route: string): string {
-  const Route = pascalCase(route);
+export function renderRoutes(route: string, framework: Framework): string {
+  if (framework === "express") {
+    return `import { Router } from "@mednours/backon/express";
+import * as controller from "./${route}.controller";
+
+export const ${camelCase(route)}Routes = Router();
+
+${camelCase(route)}Routes.get("/", controller.list);
+${camelCase(route)}Routes.post("/", controller.create);
+`;
+  }
+
   return `import { Hono, type Env } from "@mednours/backon";
 import * as controller from "./${route}.controller";
 

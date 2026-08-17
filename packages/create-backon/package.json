@@ -1,6 +1,6 @@
 {
   "name": "create-backon",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "Scaffolds a new backend project on backon — like `bun create vite@latest`, but for a consistent controller/routes/services backend layout.",
   "license": "MIT",
@@ -24,8 +24,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clack/prompts": "^0.9.1",
-    "@mednours/backon": "workspace:*"
+    "@clack/prompts": "^0.9.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
