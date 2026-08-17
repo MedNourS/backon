@@ -4,6 +4,7 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "test": "bun test",
-    "typecheck": "bun run --filter='*' typecheck"
+    "typecheck": "bun run --filter='*' typecheck",
+    "release": "bash scripts/release.sh"
   }
 }
