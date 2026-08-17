@@ -1,0 +1,34 @@
+{
+  "name": "create-backon",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Scaffolds a new backend project on backon — like `bun create vite@latest`, but for a consistent controller/routes/services backend layout.",
+  "license": "MIT",
+  "homepage": "https://github.com/mednours/backon/tree/main/packages/create-backon#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mednours/backon.git",
+    "directory": "packages/create-backon"
+  },
+  "bugs": "https://github.com/mednours/backon/issues",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "bin": {
+    "create-backon": "./src/cli.ts"
+  },
+  "files": ["src"],
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "@mednours/backon": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.2"
+  }
+}
