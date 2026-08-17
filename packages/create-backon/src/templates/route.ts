@@ -1,4 +1,4 @@
-import type { Framework } from "../prompts";
+import type { Framework, Language } from "../prompts";
 
 function pascalCase(name: string): string {
   return name
@@ -7,6 +7,10 @@ function pascalCase(name: string): string {
     .join("");
 }
 
+// Not language-aware: defineRoute()'s body/query/params typing in TS comes
+// entirely from generic inference (defineRoute<B, Q, P>(...)) — the
+// generated code itself never writes an explicit type annotation, so this
+// file is already valid JavaScript as-is. Only the file extension changes.
 export function renderController(route: string, framework: Framework): string {
   const Route = pascalCase(route);
   const backonImport = framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
@@ -29,12 +33,30 @@ export const create = defineRoute({ body: create${Route}Schema }, async (c, { bo
 `;
 }
 
-export function renderRoutes(route: string, framework: Framework): string {
+export function renderRoutes(route: string, framework: Framework, language: Language): string {
   if (framework === "express") {
+    // Router() takes no generic parameter either way — same content for
+    // both languages, same reasoning as renderController above.
     return `import { Router } from "@mednours/backon/express";
 import * as controller from "./${route}.controller";
 
 export const ${camelCase(route)}Routes = Router();
+
+${camelCase(route)}Routes.get("/", controller.list);
+${camelCase(route)}Routes.post("/", controller.create);
+`;
+  }
+
+  if (language === "javascript") {
+    // `new Hono<Env>()` is TypeScript-only syntax (a generic type
+    // argument) — not valid JavaScript, so the JS variant drops both the
+    // `type Env` import and the `<Env>` argument. The Env generic only
+    // affects c.get()/c.set() typing anyway, which doesn't exist in plain
+    // JS regardless.
+    return `import { Hono } from "@mednours/backon";
+import * as controller from "./${route}.controller";
+
+export const ${camelCase(route)}Routes = new Hono();
 
 ${camelCase(route)}Routes.get("/", controller.list);
 ${camelCase(route)}Routes.post("/", controller.create);
@@ -51,7 +73,20 @@ ${camelCase(route)}Routes.post("/", controller.create);
 `;
 }
 
-export function renderServices(route: string): string {
+export function renderServices(route: string, language: Language): string {
+  if (language === "javascript") {
+    return `// TODO: replace with real data access (see src/config/db.js)
+
+export async function list() {
+  return [];
+}
+
+export async function create(data) {
+  return { id: crypto.randomUUID(), ...data };
+}
+`;
+  }
+
   return `// TODO: replace with real data access (see src/config/db.ts)
 
 export async function list() {

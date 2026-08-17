@@ -2,12 +2,15 @@ import * as p from "@clack/prompts";
 
 export type DbChoice = "neon" | "postgres" | "sqlite" | "none";
 export type Framework = "hono" | "express";
+export type Language = "typescript" | "javascript";
 
 export interface Answers {
   projectName: string;
   framework: Framework;
+  language: Language;
   db: DbChoice;
   routes: string[];
+  copyEnv: boolean;
 }
 
 function bail(): never {
@@ -15,7 +18,7 @@ function bail(): never {
   process.exit(0);
 }
 
-function toKebabCase(input: string): string {
+export function toKebabCase(input: string): string {
   return input
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
@@ -27,11 +30,14 @@ export async function runPrompts(): Promise<Answers> {
   p.intro("create-backon");
 
   const projectName = await p.text({
-    message: "Project name",
+    message: 'Project name (or "." to scaffold into the current directory)',
     placeholder: "my-api",
     validate: (value) => {
       if (!value) return "Required.";
-      if (!/^[a-z0-9-]+$/.test(value)) return "Lowercase letters, numbers, and hyphens only.";
+      if (value === ".") return undefined;
+      if (!/^[a-z0-9-]+$/.test(value)) {
+        return 'Lowercase letters, numbers, and hyphens only (or "." for the current directory).';
+      }
       return undefined;
     },
   });
@@ -46,6 +52,15 @@ export async function runPrompts(): Promise<Answers> {
   });
   if (p.isCancel(framework)) bail();
 
+  const language = await p.select({
+    message: "Language",
+    options: [
+      { value: "typescript", label: "TypeScript" },
+      { value: "javascript", label: "JavaScript" },
+    ],
+  });
+  if (p.isCancel(language)) bail();
+
   const db = await p.select({
     message: "Database",
     options: [
@@ -56,6 +71,12 @@ export async function runPrompts(): Promise<Answers> {
     ],
   });
   if (p.isCancel(db)) bail();
+
+  const copyEnv = await p.confirm({
+    message: "Create .env from .env.example now?",
+    initialValue: true,
+  });
+  if (p.isCancel(copyEnv)) bail();
 
   const routes: string[] = [];
   p.log.step("Add routes one at a time. Leave the name blank when you're done.");
@@ -75,7 +96,9 @@ export async function runPrompts(): Promise<Answers> {
   return {
     projectName: projectName as string,
     framework: framework as Framework,
+    language: language as Language,
     db: db as DbChoice,
     routes,
+    copyEnv: copyEnv as boolean,
   };
 }

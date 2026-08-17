@@ -1,6 +1,14 @@
-import type { Answers, Framework } from "../prompts";
+import type { Answers, Framework, Language } from "../prompts";
 import { camelCase } from "./route";
 import { dbDependencies, dbEnvVars, dbReadmeNote } from "./db";
+
+// renderIndexTs/renderAppTs/renderEndpointsIndex are intentionally NOT
+// language-aware: none of them contain TypeScript-only syntax (no type
+// annotations, no `import type`, no generics), so the exact same content is
+// valid whether it ends up in a .ts or a .js file. Only the file extension
+// generate.ts writes them under changes between languages. Keeping one
+// function instead of two identical ones avoids drift between copies that
+// would otherwise need to stay in sync forever.
 
 export function renderIndexTs(framework: Framework): string {
   const backonImport = framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
@@ -23,7 +31,6 @@ app.use(exampleMiddleware);
 app.use("/", endpoints);
 `;
   }
-
   return `import { createApp } from "@mednours/backon";
 import { endpoints } from "./endpoints";
 import { exampleMiddleware } from "./middleware/example.middleware";
@@ -35,8 +42,33 @@ app.route("/", endpoints);
 `;
 }
 
-export function renderExampleMiddleware(framework: Framework): string {
+export function renderExampleMiddleware(framework: Framework, language: Language): string {
   if (framework === "express") {
+    if (language === "javascript") {
+      return `/**
+ * Example middleware, just to show the pattern — stamps a request-start
+ * timestamp onto res.locals. Error handling, request logging, secure
+ * headers, CORS, and the request body size limit are already wired into
+ * createApp() by backon itself; you don't need your own
+ * error.middleware.js unless you want to override that default behavior.
+ *
+ * This is plain Express middleware (req, res, next), not backon's
+ * BackonContext — that wrapper only exists inside defineRoute() handlers.
+ * Middleware always operates at the framework's own layer. (Also: Express
+ * middleware can't safely set a response header after calling next() — by
+ * then the response may already be sent — which is why this demonstrates
+ * res.locals instead of a header.)
+ *
+ * @param {import("@mednours/backon/express").Request} req
+ * @param {import("@mednours/backon/express").Response} res
+ * @param {import("@mednours/backon/express").NextFunction} next
+ */
+export function exampleMiddleware(req, res, next) {
+  res.locals.requestStartedAt = Date.now();
+  next();
+}
+`;
+    }
     return `import type { Request, Response, NextFunction } from "@mednours/backon/express";
 
 /**
@@ -60,6 +92,24 @@ export function exampleMiddleware(req: Request, res: Response, next: NextFunctio
 `;
   }
 
+  if (language === "javascript") {
+    return `/**
+ * Example middleware, just to show the pattern — adds a response-time
+ * header. Error handling, request logging, secure headers, CORS, and the
+ * request body size limit are already wired into createApp() by backon
+ * itself; you don't need your own error.middleware.js unless you want to
+ * override that default behavior.
+ *
+ * @param {import("@mednours/backon").BackonContext} c
+ * @param {import("@mednours/backon").Next} next
+ */
+export async function exampleMiddleware(c, next) {
+  const start = performance.now();
+  await next();
+  c.header("x-response-time-ms", String(Math.round(performance.now() - start)));
+}
+`;
+  }
   return `import type { Next } from "@mednours/backon";
 import type { BackonContext } from "@mednours/backon";
 
@@ -132,7 +182,37 @@ export function renderTsconfig(): string {
 `;
 }
 
-export function renderPackageJson(projectName: string, framework: Framework, db: Answers["db"]): string {
+/**
+ * JavaScript-mode counterpart to renderTsconfig(): no build step and no
+ * `tsc --noEmit` script to run against it, but a jsconfig.json still gets
+ * editors (VS Code and anything else that reads it) path resolution and
+ * JSDoc-based intellisense on the @param annotations in the generated
+ * middleware, without requiring TypeScript as a dependency or enforcing
+ * type errors on every file.
+ */
+export function renderJsconfig(): string {
+  return `{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "checkJs": false,
+    "allowJs": true
+  },
+  "include": ["index.js", "src"]
+}
+`;
+}
+
+export function renderPackageJson(
+  projectName: string,
+  framework: Framework,
+  language: Language,
+  db: Answers["db"]
+): string {
+  const ext = language === "javascript" ? "js" : "ts";
+
   const dependencies: Record<string, string> =
     framework === "express"
       ? {
@@ -151,29 +231,31 @@ export function renderPackageJson(projectName: string, framework: Framework, db:
           ...dbDependencies(db),
         };
 
+  // JavaScript mode intentionally has zero TypeScript-related devDependencies
+  // (no `typescript`, no `@types/*`) — there's nothing being compiled or
+  // typechecked, so pulling those in would just be dead weight.
   const devDependencies: Record<string, string> =
-    framework === "express"
-      ? {
-          "@types/bun": "latest",
-          "@types/express": "^4.17.21",
-          typescript: "^5.7.2",
-        }
-      : {
-          "@types/bun": "latest",
-          typescript: "^5.7.2",
-        };
+    language === "javascript"
+      ? {}
+      : framework === "express"
+        ? { "@types/bun": "latest", "@types/express": "^4.17.21", typescript: "^5.7.2" }
+        : { "@types/bun": "latest", typescript: "^5.7.2" };
+
+  const scripts: Record<string, string> = {
+    dev: `bun run --watch index.${ext}`,
+    start: `bun run index.${ext}`,
+    test: "bun test",
+  };
+  if (language === "typescript") {
+    scripts.typecheck = "tsc --noEmit";
+  }
 
   const pkg = {
     name: projectName,
     version: "0.1.0",
     private: true,
     type: "module",
-    scripts: {
-      dev: "bun run --watch index.ts",
-      start: "bun run index.ts",
-      test: "bun test",
-      typecheck: "tsc --noEmit",
-    },
+    scripts,
     dependencies,
     devDependencies,
   };
@@ -187,10 +269,11 @@ export function renderReadme(answers: Answers): string {
     : "- (none yet — add one under src/endpoints/)";
 
   const backonImport = answers.framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
+  const languageLabel = answers.language === "javascript" ? "JavaScript" : "TypeScript";
 
   return `# ${answers.projectName}
 
-Generated by \`create-backon\` (${answers.framework}).
+Generated by \`create-backon\` (${answers.framework}, ${languageLabel}).
 
 ## Getting started
 
@@ -208,9 +291,9 @@ ${dbReadmeNote(answers.db)}
 
 ${routeList}
 
-Each route folder follows the same shape: \`*.routes.ts\` wires HTTP methods
-to controller functions, \`*.controller.ts\` validates the request (via
-\`defineRoute\` from \`${backonImport}\`) and calls into \`*.services.ts\`,
-which is where real data access belongs.
+Each route folder follows the same shape: \`*.routes.${answers.language === "javascript" ? "js" : "ts"}\` wires HTTP
+methods to controller functions, \`*.controller.${answers.language === "javascript" ? "js" : "ts"}\` validates the
+request (via \`defineRoute\` from \`${backonImport}\`) and calls into
+\`*.services.${answers.language === "javascript" ? "js" : "ts"}\`, which is where real data access belongs.
 `;
 }
