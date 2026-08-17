@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { JWTPayload } from "hono/utils/jwt/types";
 
 /**
  * Hono's own generics for per-request state (c.get/c.set). Extend this as
@@ -8,6 +9,8 @@ import type { Context } from "hono";
 export interface Env {
   Variables: {
     requestId: string;
+    /** Set by requireAuth() middleware; undefined on any route it hasn't run on. */
+    auth?: JWTPayload;
   };
 }
 

@@ -75,6 +75,47 @@ app.get(
 serve(app); // attaches the error handler, then app.listen()
 ```
 
+## `requireEnv(schema)`
+
+Validates `process.env` against a Zod schema once, at startup, and returns the parsed (typed) result. Fails fast with every missing/invalid var named in one error, instead of the app booting cleanly and only crashing later on whichever request happens to touch a var nobody set.
+
+```ts
+import { z } from "zod";
+import { requireEnv } from "@mednours/backon";
+
+export const env = requireEnv(
+  z.object({
+    DATABASE_URL: z.string().url(),
+    PORT: z.coerce.number().default(3000),
+  })
+);
+```
+
+## `requireAuth(options)`
+
+Verifies a bearer JWT and makes the decoded payload available on the context — `c.get("auth")` (Hono) or `res.locals.auth` (Express, or `c.get("auth")` inside a `defineRoute` handler). Throws `AppError(401, "unauthorized", ...)` if the header is missing, malformed, or the token fails verification (bad signature, expired, wrong algorithm). Built on `hono/jwt` rather than a new dependency, since `hono` is already a hard dependency of this package regardless of which framework you picked.
+
+This is verification only — issuing tokens (login, signup, refresh rotation, revocation) is left to you, since that's genuinely different per project and baking in an opinion there risks being wrong for whatever actually uses it. The algorithm defaults to `HS256` and must be set explicitly rather than trusted from the token's own header — trusting that is how `alg: none` and algorithm-confusion attacks work.
+
+```ts
+import { requireAuth } from "@mednours/backon";
+
+app.use("/api/*", requireAuth({ secret: process.env.JWT_SECRET! }));
+app.get("/api/me", (c) => c.json({ auth: c.get("auth") }));
+```
+
+## `rateLimit(options)`
+
+In-memory token-bucket rate limiter. Throws `AppError(429, "rate_limited", ...)` once a key exceeds `max` requests within `windowMs`, with a `Retry-After` header set to when the window resets. Defaults to 60 requests per minute, keyed by the caller's IP; override either with `options`.
+
+**Per-process state** — resets on restart and doesn't share counts across multiple instances or serverless invocations. Fine for a single long-running server; for anything horizontally scaled, back it with Redis instead.
+
+```ts
+import { rateLimit } from "@mednours/backon";
+
+app.use("/auth/login", rateLimit({ windowMs: 60_000, max: 5 })); // tighter limit on a login route
+```
+
 ## Requirements
 
 Bun >= 1.3. This package ships TypeScript source directly (no build step) since it's Bun-only by design.

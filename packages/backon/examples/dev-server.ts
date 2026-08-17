@@ -7,7 +7,9 @@
  * client would.
  */
 import { z } from "zod";
-import { createApp, defineRoute, serve } from "../src/index";
+import { createApp, defineRoute, requireAuth, rateLimit, serve } from "../src/index";
+
+const AUTH_SECRET = "dev-only-secret-do-not-use-in-real-life";
 
 const app = createApp();
 
@@ -27,6 +29,12 @@ app.get("/boom", () => {
   throw new Error("deliberately unhandled, to see the generic 500 shape");
 });
 
+app.use("/whoami", requireAuth({ secret: AUTH_SECRET }));
+app.get("/whoami", (c) => c.json({ auth: c.get("auth") }));
+
+app.use("/limited", rateLimit({ windowMs: 10_000, max: 3 }));
+app.get("/limited", (c) => c.json({ ok: true }));
+
 serve(app);
 
 // curl http://localhost:3000/health
@@ -34,3 +42,6 @@ serve(app);
 // curl -X POST http://localhost:3000/echo -H 'content-type: application/json' -d '{"text":"hi"}'
 // curl -X POST http://localhost:3000/echo -H 'content-type: application/json' -d '{}'   # 400, invalid_body
 // curl http://localhost:3000/boom                                                        # 500, internal_error
+// curl http://localhost:3000/whoami                                                      # 401, unauthorized
+// curl http://localhost:3000/whoami -H "authorization: Bearer <token signed with AUTH_SECRET>"
+// for i in 1 2 3 4; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/limited; done   # 200 200 200 429

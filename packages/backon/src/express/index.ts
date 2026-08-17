@@ -11,6 +11,14 @@ export type { ErrorResponseBody } from "../error";
 
 export { logger } from "../logger";
 
+export { requireEnv } from "../require-env";
+
+export { requireAuth } from "./require-auth";
+export type { VerifyJwtOptions } from "../auth-core";
+
+export { rateLimit } from "./rate-limit";
+export type { RateLimitOptions } from "./rate-limit";
+
 export type { BackonContext } from "./types";
 
 /**

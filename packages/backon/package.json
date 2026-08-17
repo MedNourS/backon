@@ -1,6 +1,6 @@
 {
   "name": "@mednours/backon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Opinionated backend framework wrapper for Bun. Wraps Hono (default) or Express (via @mednours/backon/express) with the same baked-in security, logging, and validation defaults.",
   "license": "MIT",
