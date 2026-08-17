@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [backon, create-backon]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Install at the workspace root so bun resolves both packages'
+      # dependencies in one pass, the same way `bun install` does locally.
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: bun run typecheck
+
+      - name: Test ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: bun test
+
+      # Catches packaging regressions — a stale "files" field, a broken
+      # export path, an accidentally-excluded file — before they'd only
+      # surface at actual publish time.
+      - name: Verify ${{ matrix.package }} still packs cleanly
+        working-directory: packages/${{ matrix.package }}
+        run: bun pm pack --dry-run
