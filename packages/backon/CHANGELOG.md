@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Fix: the rendered reference page (`apiReferenceHtml()`, `apiReferenceHtmlInline()`, and `serveApiDocs()`'s own `/docs` route) showed a "Developer Tools" toolbar with Configure/Share/Deploy buttons above the content on `localhost` — Scalar's `showDeveloperTools` option defaults to `"localhost"`, and it's promotion for Scalar's own hosted account, unrelated to the document being viewed. Now set to `"never"` by default.
+
 ## 0.5.0
 
 - Fix: the reference page `serveApiDocs()`/`apiReferenceHtml()` rendered used a legacy Scalar auto-init pattern (a `<script id="api-reference" data-url="...">` tag) that isn't reliable across Scalar versions and fails outright — Scalar's own "Document could not be loaded" error — when the page is opened as a local file instead of served over HTTP, since a browser blocks one `file://` URL from fetching another. Both `apiReferenceHtml()` and the new `apiReferenceHtmlInline()` now use `Scalar.createApiReference()`, the documented initialization API.

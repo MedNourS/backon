@@ -98,6 +98,11 @@ export function buildOpenApiDocument(routes: CollectedRoute[], options: OpenApiO
 }
 
 function pageShell(title: string, config: Record<string, unknown>): string {
+  // showDeveloperTools defaults to "localhost" in Scalar itself, which shows
+  // a Configure/Share/Deploy toolbar above the reference — promotion for
+  // Scalar's own hosted account, unrelated to this document. Off by default
+  // here since it renders whether or not the project uses Scalar's service.
+  const fullConfig = { showDeveloperTools: "never", ...config };
   return `<!doctype html>
 <html>
   <head>
@@ -109,7 +114,7 @@ function pageShell(title: string, config: Record<string, unknown>): string {
     <div id="api-reference"></div>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
     <script>
-      Scalar.createApiReference("#api-reference", ${JSON.stringify(config)});
+      Scalar.createApiReference("#api-reference", ${JSON.stringify(fullConfig)});
     </script>
   </body>
 </html>

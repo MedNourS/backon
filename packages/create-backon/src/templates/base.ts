@@ -284,6 +284,7 @@ export function renderPackageJson(
     // arguments (like the route name) straight through without needing
     // a `--` separator.
     "add-route": "bunx create-backon add-route",
+    "add-method": "bunx create-backon add-method",
     "remove-route": "bunx create-backon remove-route",
     "list-routes": "bunx create-backon list-routes",
     doctor: "bunx create-backon doctor",

@@ -4,7 +4,7 @@ import { detectProject } from "./detect";
 import { parseMountedRoutes, readEndpointsIndex } from "./endpoints-index";
 import { toKebabCase } from "./prompts";
 import { renderEndpointsIndex } from "./templates/base";
-import { renderController, renderRoutes, renderServices } from "./templates/route";
+import { renderBlankController, renderBlankRoutes, renderBlankServices } from "./templates/route";
 
 export interface AddRouteResult {
   route: string;
@@ -18,11 +18,13 @@ async function write(path: string, contents: string): Promise<void> {
 }
 
 /**
- * Adds a single route to an already-scaffolded backon project: detects the
- * project's framework/language from its package.json, writes the same
- * controller/routes/services trio generateProject() would have written for
- * this route at scaffold time, and regenerates src/endpoints/index.<ext> so
- * the new route is mounted alongside whatever was already there.
+ * Adds a single blank route to an already-scaffolded backon project: detects
+ * the project's framework/language from its package.json, writes the same
+ * blank controller/routes/services trio generateProject() would have
+ * written for this route at scaffold time (zero methods — see
+ * templates/route.ts), and regenerates src/endpoints/index.<ext> so the new
+ * route is mounted alongside whatever was already there. Use
+ * `add-method` afterward to give it an actual GET/POST/etc.
  */
 export async function addRoute(rawName: string, cwd: string = process.cwd()): Promise<AddRouteResult> {
   const route = toKebabCase(rawName);
@@ -55,9 +57,9 @@ export async function addRoute(rawName: string, cwd: string = process.cwd()): Pr
   const routeDir = join(endpointsDir, route);
   const filesWritten: string[] = [];
   const files: Array<[string, string]> = [
-    [join(routeDir, `${route}.controller.${ext}`), renderController(route, framework)],
-    [join(routeDir, `${route}.routes.${ext}`), renderRoutes(route, framework, language)],
-    [join(routeDir, `${route}.services.${ext}`), renderServices(route, language)],
+    [join(routeDir, `${route}.controller.${ext}`), renderBlankController()],
+    [join(routeDir, `${route}.routes.${ext}`), renderBlankRoutes(route, framework, language)],
+    [join(routeDir, `${route}.services.${ext}`), renderBlankServices()],
   ];
 
   for (const [path, contents] of files) {

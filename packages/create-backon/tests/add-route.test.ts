@@ -67,15 +67,18 @@ describe("addRoute", () => {
     expect(result.route).toBe("user-profile");
     expect(result.filesWritten).toHaveLength(4); // controller, routes, services, index
 
+    // add-route now writes a blank endpoint (no methods) — add-method fills
+    // in the real imports/exports once a GET/POST/etc. actually gets added.
     const controller = await readFile(join(root, "src/endpoints/user-profile/user-profile.controller.ts"), "utf-8");
-    expect(controller).toContain('import { defineRoute } from "@mednours/backon"');
+    expect(controller).toContain("run `bun run add-method`");
 
     const routesFile = await readFile(join(root, "src/endpoints/user-profile/user-profile.routes.ts"), "utf-8");
     expect(routesFile).toContain("userProfileRoutes");
     expect(routesFile).toContain('import { Hono, type Env } from "@mednours/backon"');
+    expect(routesFile).toContain("run `bun run add-method`");
 
     const services = await readFile(join(root, "src/endpoints/user-profile/user-profile.services.ts"), "utf-8");
-    expect(services).toContain("export async function list()");
+    expect(services).toContain("`bun run add-method`");
 
     // Both the pre-existing route and the new one are mounted.
     const endpointsIndex = await readFile(join(root, "src/endpoints/index.ts"), "utf-8");

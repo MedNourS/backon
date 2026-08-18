@@ -46,6 +46,7 @@ describe("generateProject", () => {
     // they're runnable as `bun run add-route users` from inside the project.
     const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf-8"));
     expect(pkgJson.scripts["add-route"]).toBe("bunx create-backon add-route");
+    expect(pkgJson.scripts["add-method"]).toBe("bunx create-backon add-method");
     expect(pkgJson.scripts["remove-route"]).toBe("bunx create-backon remove-route");
     expect(pkgJson.scripts["list-routes"]).toBe("bunx create-backon list-routes");
     expect(pkgJson.scripts.doctor).toBe("bunx create-backon doctor");
@@ -75,12 +76,15 @@ describe("generateProject", () => {
       cwd
     );
 
+    // Every route starts blank now (no methods) — add-method wires up the
+    // real imports/exports once a GET/POST/etc. actually gets added.
     const controller = await readFile(join(root, "src/endpoints/telemetry/telemetry.controller.ts"), "utf-8");
-    expect(controller).toContain('import { defineRoute } from "@mednours/backon"');
+    expect(controller).toContain("run `bun run add-method`");
 
     const routes = await readFile(join(root, "src/endpoints/telemetry/telemetry.routes.ts"), "utf-8");
     expect(routes).toContain("telemetryRoutes");
     expect(routes).toContain('import { Hono, type Env } from "@mednours/backon"');
+    expect(routes).toContain("run `bun run add-method`");
 
     const endpointsIndex = await readFile(join(root, "src/endpoints/index.ts"), "utf-8");
     expect(endpointsIndex).toContain('import { telemetryRoutes } from "./telemetry/telemetry.routes";');
@@ -121,11 +125,12 @@ describe("generateProject", () => {
     expect(appTs).toContain('serveApiDocs(app, "/docs", { title: "my-api" });');
 
     const controller = await readFile(join(root, "src/endpoints/telemetry/telemetry.controller.ts"), "utf-8");
-    expect(controller).toContain('import { defineRoute } from "@mednours/backon/express"');
+    expect(controller).toContain("run `bun run add-method`");
 
     const routes = await readFile(join(root, "src/endpoints/telemetry/telemetry.routes.ts"), "utf-8");
     expect(routes).toContain('import { Router } from "@mednours/backon/express"');
     expect(routes).toContain("telemetryRoutes");
+    expect(routes).toContain("run `bun run add-method`");
 
     const endpointsIndex = await readFile(join(root, "src/endpoints/index.ts"), "utf-8");
     expect(endpointsIndex).toContain('import { Router } from "@mednours/backon/express"');

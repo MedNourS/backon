@@ -6,11 +6,15 @@ import { addRoute } from "./add-route";
 import { removeRoute } from "./remove-route";
 import { listRoutes } from "./list-routes";
 import { runDoctor } from "./doctor";
+import { addMethod } from "./add-method";
+import { formatEndpointsDashboard, listEndpointsWithMethods } from "./route-methods";
+import { HTTP_VERBS, paramNamesFromPath, pascalCase, type HttpVerb, type MethodSpec } from "./templates/route";
 
 const ADD_ROUTE_SUBCOMMANDS = new Set(["add-route", "route"]);
 const REMOVE_ROUTE_SUBCOMMANDS = new Set(["remove-route", "rm-route"]);
 const LIST_ROUTES_SUBCOMMANDS = new Set(["list-routes", "routes"]);
 const DOCTOR_SUBCOMMANDS = new Set(["doctor"]);
+const ADD_METHOD_SUBCOMMANDS = new Set(["add-method", "method"]);
 
 async function promptForRouteName(introText: string): Promise<string> {
   p.intro(introText);
@@ -35,7 +39,8 @@ async function runAddRoute(args: string[]): Promise<void> {
   }
 
   const { route, root, filesWritten } = await addRoute(name);
-  p.log.success(`Added src/endpoints/${route} (${filesWritten.length} files) in ${root}`);
+  p.log.success(`Added src/endpoints/${route} (${filesWritten.length} files, no methods yet) in ${root}`);
+  p.log.info("Run `bun run add-method` to give it a GET/POST/etc.");
 }
 
 async function runRemoveRoute(args: string[]): Promise<void> {
@@ -64,7 +69,8 @@ async function runListRoutes(): Promise<void> {
     p.log.info(`No routes mounted in ${root}.`);
     return;
   }
-  p.log.info(`Routes mounted in ${root}:\n${routes.map((route) => `  - ${route}`).join("\n")}`);
+  const summaries = await listEndpointsWithMethods();
+  p.note(formatEndpointsDashboard(summaries), `Endpoints in ${root}`);
 }
 
 async function runDoctorCommand(): Promise<void> {
@@ -75,6 +81,130 @@ async function runDoctorCommand(): Promise<void> {
   }
   p.log.warn(`${issues.length} issue(s) found in ${root}:\n${issues.map((issue) => `  - ${issue.detail}`).join("\n")}`);
   process.exitCode = 1;
+}
+
+function suggestMethodName(verb: HttpVerb, path: string): string {
+  const params = paramNamesFromPath(path);
+  if (verb === "get" && params.length === 0) return "list";
+  if (verb === "get") return `getBy${pascalCase(params[0] ?? "id")}`;
+  if (verb === "post") return "create";
+  if (verb === "put" || verb === "patch") return "update";
+  return "remove";
+}
+
+const IDENTIFIER_PATTERN = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
+/**
+ * Interactive, loops until the user's done: shows every endpoint and the
+ * methods it already has (colored by verb), then either picks one to add
+ * to or spins up a new blank one, then walks through verb/path/name/schema
+ * choices for a single method. Kept separate from add-route/remove-route on
+ * purpose — those stay simple whole-endpoint create/delete for scripted use.
+ */
+async function runAddMethod(): Promise<void> {
+  p.intro("create-backon add-method");
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { root, routes } = await listRoutes();
+    const summaries = await listEndpointsWithMethods();
+    p.note(formatEndpointsDashboard(summaries), `Endpoints in ${root}`);
+
+    const routeChoice = await p.select({
+      message: "Add a method to which endpoint?",
+      options: [
+        ...routes.map((route) => ({ value: route, label: route })),
+        { value: "__new__", label: "+ New blank endpoint" },
+      ],
+    });
+    if (p.isCancel(routeChoice)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    let route = routeChoice;
+    if (route === "__new__") {
+      const name = await p.text({
+        message: "New endpoint name",
+        placeholder: "e.g. users",
+        validate: (value) => (!value ? "Required." : undefined),
+      });
+      if (p.isCancel(name)) {
+        p.cancel("Cancelled.");
+        return;
+      }
+      const added = await addRoute(name);
+      route = added.route;
+      p.log.success(`Added blank endpoint src/endpoints/${route}`);
+    }
+
+    const verb = await p.select({
+      message: "HTTP method",
+      options: HTTP_VERBS.map((v) => ({ value: v, label: v.toUpperCase() })),
+    });
+    if (p.isCancel(verb)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    const defaultPath = verb === "get" || verb === "post" ? "/" : "/:id";
+    const path = await p.text({
+      message: "Path (relative to this endpoint's mount)",
+      placeholder: defaultPath,
+      initialValue: defaultPath,
+      validate: (value) => (!value.startsWith("/") ? 'Must start with "/".' : undefined),
+    });
+    if (p.isCancel(path)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    const existingMethods = summaries.find((s) => s.route === route)?.methods ?? [];
+    const defaultName = suggestMethodName(verb, path);
+    const name = await p.text({
+      message: "Name (controller export + service function)",
+      placeholder: defaultName,
+      initialValue: defaultName,
+      validate: (value) => {
+        if (!IDENTIFIER_PATTERN.test(value)) return "Must be a valid identifier.";
+        if (existingMethods.some((m) => m.name === value)) return `"${value}" is already used in this endpoint.`;
+        return undefined;
+      },
+    });
+    if (p.isCancel(name)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    let needsBody = false;
+    if (verb === "post" || verb === "put" || verb === "patch") {
+      const answer = await p.confirm({ message: "Validate a request body?", initialValue: true });
+      if (p.isCancel(answer)) {
+        p.cancel("Cancelled.");
+        return;
+      }
+      needsBody = answer;
+    }
+
+    const needsQuery = await p.confirm({ message: "Validate query params?", initialValue: false });
+    if (p.isCancel(needsQuery)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    const spec: MethodSpec = { verb, path, name, needsBody, needsQuery };
+    try {
+      const { filesWritten } = await addMethod(route, spec);
+      p.log.success(`Added ${verb.toUpperCase()} ${path} → ${name} in src/endpoints/${route} (${filesWritten.length} files)`);
+    } catch (err) {
+      p.log.error(err instanceof Error ? err.message : String(err));
+    }
+
+    const again = await p.confirm({ message: "Add another method?", initialValue: true });
+    if (p.isCancel(again) || !again) break;
+  }
+
+  p.outro("Done.");
 }
 
 async function runScaffold(): Promise<void> {
@@ -104,6 +234,10 @@ async function main() {
   }
   if (subcommand && DOCTOR_SUBCOMMANDS.has(subcommand)) {
     await runDoctorCommand();
+    return;
+  }
+  if (subcommand && ADD_METHOD_SUBCOMMANDS.has(subcommand)) {
+    await runAddMethod();
     return;
   }
 

@@ -41,11 +41,14 @@ my-api/
         <route>.services.ts
 ```
 
-Each route's `*.routes.ts` wires HTTP methods to controller functions,
-`*.controller.ts` validates the request via `defineRoute` (from
-`@mednours/backon` or `@mednours/backon/express`, depending on the
-framework picked) and calls into `*.services.ts`, which is where real data
-access belongs. In JavaScript mode every file is generated without any
+Every route starts blank — a folder mounted in `src/endpoints/index.ts`
+with zero HTTP methods wired up yet. `bun run add-method` (below) adds
+them one at a time: each one appends a `defineRoute`-wrapped export to
+`*.controller.ts` (from `@mednours/backon` or `@mednours/backon/express`,
+depending on the framework picked), a matching function to `*.services.ts`
+— typed via `z.infer` off whatever schema the method declared, so the
+service layer doesn't just see `unknown` — and the mount line to
+`*.routes.ts`. In JavaScript mode every file is generated without any
 TypeScript-only syntax (no `import type`, no generics, no type
 annotations) — generated files are genuinely plain JavaScript rather than
 TypeScript with the types stripped, with JSDoc `@param` comments on the one
@@ -89,12 +92,40 @@ under a shorter name.)
 
 It reads the project's own `package.json` to figure out whether it's
 Hono or Express, TypeScript or JavaScript — no need to answer those again
-— then writes `src/endpoints/users/users.controller.ts` (or `.routes`,
-`.services`, matching whatever the rest of the project already generates),
+— then writes a blank `src/endpoints/users/users.controller.ts` (or
+`.routes`, `.services` — zero methods yet, same as the initial scaffold),
 and regenerates `src/endpoints/index.ts` so the new route is mounted next
 to the ones that were already there. It refuses to run outside a backon
 project, refuses a route name whose folder already exists, and refuses a
-name that's already mounted.
+name that's already mounted. Run `add-method` next to give the new route
+an actual GET/POST/etc.
+
+## Adding a method to a route
+
+Interactive, and separate from `add-route` on purpose — this is where the
+per-endpoint work happens, while `add-route`/`remove-route` stay simple
+whole-folder create/delete:
+
+```
+bun run add-method
+```
+
+or `bunx create-backon add-method` (`method` also works). It opens with a
+dashboard of every endpoint already mounted and the methods each one
+actually has right now — read straight off `*.routes.ts`, colored by verb
+(GET/POST/PUT/PATCH/DELETE) — then walks through: which endpoint to add
+to (or spin up a new blank one on the spot), the HTTP method, the path
+(`/` or `/:id`, or anything else — path params are picked up automatically
+from whatever `:name` segments show up), a name for the controller export
+and matching service function (suggested — `list`, `create`, `getById`,
+`update`, `remove` — but editable), and whether this method validates a
+request body and/or query params. Path params always get a Zod schema
+(auto-derived from the path itself — no guessing there); body and query
+schemas start as `z.object({})` with a `TODO` comment, same convention as
+everywhere else in the generated code, for filling in by hand. Loops until
+told to stop, so a whole endpoint's worth of methods is normally one
+`bun run add-method` session. Refuses a method name or a verb+path pair
+that's already there.
 
 ## Removing a route
 
@@ -123,7 +154,9 @@ bun run list-routes
 ```
 
 or `bunx create-backon list-routes` (`routes` also works). Read-only —
-prints every route currently mounted in `src/endpoints/index.ts`.
+the same dashboard `add-method` opens with: every route mounted in
+`src/endpoints/index.ts`, and the HTTP methods each one actually has,
+colored by verb.
 
 ## Checking a project for drift
 

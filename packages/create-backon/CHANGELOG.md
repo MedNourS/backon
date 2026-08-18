@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Add `add-method` — an interactive command for building up one endpoint's HTTP methods at a time, separate from `add-route`/`remove-route` (which stay simple whole-folder create/delete). Opens with a dashboard of every mounted endpoint and the methods it already has (colored by verb), then walks through endpoint, verb, path, name, and whether the method validates a body/query — path params are auto-derived from the path itself, body/query schemas start as a `TODO`-commented `z.object({})` like the rest of the generated scaffolding. Loops until told to stop.
+- `bun run list-routes` now shows the same per-method, colored dashboard instead of just a flat list of route names.
+- Routes now start blank — `add-route` and the initial `bun create backon` route prompt both write an endpoint with zero HTTP methods wired (just a mounted, empty `Router()`/`Hono()` instance) instead of a fixed GET-list/POST-create pair. Methods are always a deliberate second step via `add-method`.
+- The service function each `add-method`-added method gets is typed via `z.infer<typeof theSchema>` off whatever body/query/params schema the method declared (the schema itself is exported from the controller for this), instead of the old fixed pair's `data: unknown`. JavaScript-mode projects are unaffected — there's nothing to type there.
+
 ## 0.6.2
 
 - Fix: the generated `src/app.ts`/`src/app.js` never actually called `serveApiDocs()`, so `/docs` 404'd on the dev server even though `bun run docs` (the static generator) worked fine — the two were never wired together. `serveApiDocs(app, "/docs", { title })` is now called by default, last, after every route is mounted, so both the live `/docs` page and the static `bun run docs` output are available out of the box.

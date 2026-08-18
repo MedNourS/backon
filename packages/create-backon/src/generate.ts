@@ -13,7 +13,7 @@ import {
   renderReadme,
   renderTsconfig,
 } from "./templates/base";
-import { renderController, renderRoutes, renderServices } from "./templates/route";
+import { renderBlankController, renderBlankRoutes, renderBlankServices } from "./templates/route";
 import { renderDbFile } from "./templates/db";
 
 async function write(path: string, contents: string): Promise<void> {
@@ -102,12 +102,14 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     [join(root, `scripts/generate-docs.${ext}`), renderGenerateDocsScript(packageName, answers.framework)],
   ];
 
+  // Every route starts blank (no methods wired) — `bun run add-method` adds
+  // them one at a time afterward. See templates/route.ts for why.
   for (const route of answers.routes) {
     const dir = join(root, "src/endpoints", route);
     files.push(
-      [join(dir, `${route}.controller.${ext}`), renderController(route, answers.framework)],
-      [join(dir, `${route}.routes.${ext}`), renderRoutes(route, answers.framework, answers.language)],
-      [join(dir, `${route}.services.${ext}`), renderServices(route, answers.language)]
+      [join(dir, `${route}.controller.${ext}`), renderBlankController()],
+      [join(dir, `${route}.routes.${ext}`), renderBlankRoutes(route, answers.framework, answers.language)],
+      [join(dir, `${route}.services.${ext}`), renderBlankServices()]
     );
   }
 
