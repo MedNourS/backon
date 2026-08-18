@@ -17,12 +17,18 @@ Or, without the `bun create` shorthand:
 bunx create-backon
 ```
 
+No Bun installed? `npx create-backon` and `npm create backon` both work too
+— same scaffolder either way, generated projects still default to Bun
+scripts (see [Running a generated project without Bun](#running-a-generated-project-without-bun)
+if that's not an option).
+
 Prompts for a project name (or `.` to scaffold into the current directory,
 same as `bun create vite@latest .`), a framework (Hono or Express), a
 language (TypeScript or JavaScript), a database (Neon, Postgres, SQLite, or
-none — via [Drizzle](https://orm.drizzle.team)), whether to create `.env`
-from `.env.example` right away (default yes — skips the manual `cp` step),
-and any number of routes, then generates:
+none — via [Drizzle](https://orm.drizzle.team)), where it's headed
+([Vercel](#deploying-to-vercel), another Node/Bun host, local-only, or not
+sure yet), whether to create `.env` from `.env.example` right away (default
+yes — skips the manual `cp` step), and any number of routes, then generates:
 
 ```
 my-api/
@@ -196,6 +202,57 @@ This is separate from `serveApiDocs(app)` (documented in
 same spec and reference page as live routes on a running server instead of
 writing them to disk — useful for CI, static hosting, or feeding the spec
 into an external tool, where `serveApiDocs`'s live routes don't apply.
+
+## Deploying to Vercel
+
+Picking Vercel at the "Where's this headed?" prompt adds two things, both
+additive — nothing about running the project locally changes:
+
+- `src/app.<ext>` gets a default export (`export default app;`), which is
+  all [Vercel's zero-config Hono/Express support](https://vercel.com/docs/frameworks/backend/hono)
+  needs — it already lives at one of Vercel's recognized entry paths.
+  `index.<ext>`'s `serve(app)` call is untouched and keeps working for
+  `bun run dev`/`start` anywhere else; Vercel just never runs that file.
+- `vercel.json` pins the [Bun runtime](https://vercel.com/docs/functions/runtimes/bun)
+  (`{ "bunVersion": "1.x" }`), so the deployed function runs on the same
+  runtime as local dev. Not required for the zero-config detection itself —
+  only there so the runtime doesn't silently switch between local and
+  deployed.
+
+Connect the repo at [vercel.com/new](https://vercel.com/new) or run
+`vercel deploy`; `vercel dev` runs it locally the same way it runs once
+deployed. Missed the prompt, or already have a project? Add both by hand —
+`export default app;` at the end of `src/app.<ext>`, and a `vercel.json`
+with `{ "bunVersion": "1.x" }` — no need to re-scaffold.
+
+## Running a generated project without Bun
+
+Generated projects still default to Bun (`bun install`, `bun run dev`) —
+that hasn't changed. But the underlying pieces are genuinely Node-capable
+now, if Bun isn't an option:
+
+- `@mednours/backon` itself (0.7.0+) runs on Node — its Hono adapter's
+  `serve()` uses [`@hono/node-server`](https://github.com/honojs/node-server)
+  under Node instead of `Bun.serve()`, detected automatically. Install it
+  yourself (`npm install @hono/node-server`) — it's an optional peer
+  dependency, so `npm install` alone won't pull it in.
+- `create-backon` itself runs via `npx create-backon`/`npm create backon`
+  now too, not just `bunx`/`bun create` — see the badge on
+  [npmjs.com/package/create-backon](https://www.npmjs.com/package/create-backon)
+  if in doubt about which runtimes are supported.
+- The one piece that's still Bun-flavored: generated source uses
+  extensionless relative imports (`./src/app`, not `./src/app.ts` or
+  `./src/app.js`) — fine for Bun's bundler-style resolution, but plain
+  `node index.ts`/`node index.js` refuses those outright (Node's ESM loader
+  requires a real extension on every relative import, full stop — this
+  isn't a TypeScript thing, it fails the exact same way in JavaScript
+  mode). [`tsx`](https://github.com/privatenumber/tsx) resolves imports the
+  same permissive way Bun does, so `npx tsx index.ts` (or `npx tsx watch
+  index.ts` for the `bun run dev` equivalent) runs a generated project
+  under plain Node with no other changes — verified against a real
+  generated project, Hono and Express, TypeScript and JavaScript mode, all
+  four combinations. `npm test` still needs a real Node test runner in
+  place of `bun test`, which isn't wired up here — that part's on you.
 
 ## Requirements
 

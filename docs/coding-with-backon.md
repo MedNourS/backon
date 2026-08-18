@@ -108,10 +108,14 @@ context there.
 
 ### `serve(app, port?)`
 
-Starts the app (Bun's native server for Hono, `app.listen` for Express) and
-wires graceful shutdown — on `SIGTERM`/`SIGINT`, stop accepting new
-connections, let in-flight requests finish, then exit. Port defaults to the
-`PORT` env var, then `3000`.
+`await` it — it's async. Starts the app: `Bun.serve()` for Hono when
+running under Bun (the default), `@hono/node-server`'s `serve()` for Hono
+when running under Node instead (install it yourself — it's an optional
+peer dependency, only needed if this app actually runs on Node), or
+`app.listen` for Express either way, since Express never had a separate
+Bun-native path to begin with. Wires graceful shutdown regardless — on
+`SIGTERM`/`SIGINT`, stop accepting new connections, let in-flight requests
+finish, then exit. Port defaults to the `PORT` env var, then `3000`.
 
 ### `AppError`
 
@@ -213,9 +217,13 @@ app.get("/ws", defineWebSocket({
 Verified live against a real `WebSocket` client — a message sent to `/ws`
 comes back as `echo: <message>`. On Hono the handshake happens at
 `Bun.serve()`'s own level (an HTTP upgrade, not an ordinary request/response
-cycle), which is why this only works through this package's own `serve()`
-— it passes `hono/bun`'s upgrade handler into `Bun.serve()` so the upgrade
-can happen at all.
+cycle), which is why this only works when the app is actually running on
+Bun through this package's own `serve()` — it passes `hono/bun`'s upgrade
+handler into `Bun.serve()` so the upgrade can happen at all. There's no
+Node equivalent yet: in an app running under Node (see `serve()` above), a
+`defineWebSocket()` route throws a clear error the moment it's actually
+hit, rather than failing at import time or some more confusing way — every
+other route is unaffected.
 
 On Express there is no route-level concept of an HTTP upgrade — only the
 `ws` package's own server has one, and that server doesn't exist until

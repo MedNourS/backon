@@ -1,7 +1,8 @@
 # @mednours/backon
 
-Opinionated backend framework wrapper for Bun. Two adapters, same names,
-same JSON error shape, same defaults — pick per project:
+Opinionated backend framework wrapper, Bun-first but Node-compatible. Two
+adapters, same names, same JSON error shape, same defaults — pick per
+project:
 
 - `@mednours/backon` (default export) — wraps [Hono](https://hono.dev)
 - `@mednours/backon/express` — wraps [Express](https://expressjs.com); requires `express`, `cors`, `helmet`, and `compression` as peer dependencies in the consuming project
@@ -27,7 +28,7 @@ app.get(
   )
 );
 
-serve(app);
+await serve(app);
 ```
 
 ## What `createApp()` wires in by default
@@ -55,7 +56,9 @@ app.post(
 
 ## `serve(app)`
 
-Runs on Bun's native server (Express adapter: Node's http server via Express's own `app.listen`) with graceful shutdown wired to `SIGTERM`/`SIGINT` — new connections stop being accepted and in-flight requests finish before exit.
+Async now (`await` it) — see why below. Runs on `Bun.serve()` when the process is running under Bun (the default, and the faster of the two), or [`@hono/node-server`](https://github.com/honojs/node-server) when it's running under Node instead, detected automatically at call time; the Express adapter always runs on Node's http server via Express's own `app.listen`, since Express has no separate Bun-native path to begin with. Either way, graceful shutdown is wired to `SIGTERM`/`SIGINT` — new connections stop being accepted and in-flight requests finish before exit.
+
+`@hono/node-server` is an optional peer dependency — install it yourself (`npm install @hono/node-server` or your package manager's equivalent) only if this app actually runs on Node; Bun-only projects never need it. `serve()` had to become `async` to support this: it dynamically imports whichever of `hono/bun` or `@hono/node-server` the current runtime needs, rather than a static import that would otherwise crash at module-load time under whichever runtime it *doesn't* match (`hono/bun` touches Bun's global at import time, which throws immediately under Node — this used to make importing `@mednours/backon` at all fail under Node, not just calling `serve()`).
 
 **Express-specific:** `serve(app)` also registers the central error handler. Do this *after* every route is registered, not inside `createApp()` — Express's error-handling middleware only catches errors from routes registered *before* it, the opposite of Hono's `onError()`. When not using this `serve()` (wrapping the app for a serverless platform, or a `supertest` suite), call `attachErrorHandler(app)` directly, after every route.
 
@@ -120,7 +123,7 @@ app.use("/auth/login", rateLimit({ windowMs: 60_000, max: 5 })); // tighter limi
 
 Registers a WebSocket route with `onOpen`/`onMessage`/`onClose` handlers, each getting a `ws` handle with `.send()`/`.close()`.
 
-On Hono, the handshake happens at `Bun.serve()`'s own level (an HTTP upgrade, not an ordinary request/response cycle), so this only works with the `serve()` this package exports — it passes `hono/bun`'s websocket handler into `Bun.serve()` under the hood. Register it like any other route:
+On Hono, the handshake happens at `Bun.serve()`'s own level (an HTTP upgrade, not an ordinary request/response cycle), so this only works when the app is actually running on Bun with the `serve()` this package exports — it passes `hono/bun`'s websocket handler into `Bun.serve()` under the hood. There's no Node equivalent wired up yet: a `defineWebSocket()` route registered in an app that ends up running under Node (see `serve(app)` above) throws a clear error the moment that specific route is hit, rather than failing at import time or in some more confusing way — the rest of the app is unaffected. Register it like any other route:
 
 ```ts
 app.get("/ws", defineWebSocket({
@@ -212,6 +215,6 @@ serve(app);
 
 ## Requirements
 
-Bun >= 1.3. This package ships TypeScript source directly (no build step) since it's Bun-only by design.
+Bun >= 1.3, or Node >= 18.14.1 with [`@hono/node-server`](https://github.com/honojs/node-server) installed (only needed for `serve()` on the Hono adapter — see above; the Express adapter needs nothing extra on Node, it always ran there). Bun consumers resolve straight to this package's TypeScript source with zero build step, via package.json's `"bun"` export condition; Node consumers get a prebuilt `dist/` instead, since Node can't execute this package's `.ts` source directly the way Bun can (Node's own native TypeScript support explicitly excludes anything under `node_modules`).
 
 Part of the [backon monorepo](https://github.com/mednours/backon) — see [`create-backon`](https://www.npmjs.com/package/create-backon) to scaffold a new project on top of this.

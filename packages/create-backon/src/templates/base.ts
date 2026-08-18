@@ -1,4 +1,4 @@
-import type { Answers, Framework, Language } from "../prompts";
+import type { Answers, DeployTarget, Framework, Language } from "../prompts";
 import { camelCase } from "./route";
 import { dbDependencies, dbEnvVars, dbReadmeNote } from "./db";
 
@@ -12,10 +12,18 @@ import { dbDependencies, dbEnvVars, dbReadmeNote } from "./db";
 
 export function renderIndexTs(framework: Framework): string {
   const backonImport = framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
+  // The Hono adapter's serve() is async as of @mednours/backon 0.7.0 (it
+  // dynamically imports Bun.serve()/@hono/node-server depending which
+  // runtime it's actually on) — top-level await works fine here since
+  // generated projects are ESM ("type": "module" in their package.json).
+  // The Express adapter's serve() stays synchronous (always app.listen()
+  // under the hood, no runtime branching to speak of), so it's left
+  // un-awaited rather than implying an async contract that isn't real.
+  const call = framework === "express" ? "serve(app);" : "await serve(app);";
   return `import { serve } from "${backonImport}";
 import { app } from "./src/app";
 
-serve(app);
+${call}
 `;
 }
 
@@ -23,7 +31,23 @@ serve(app);
 // the route table as it stands at call time, so anything registered after
 // this line would be missing from /docs. Same live route this project's
 // bun run docs script generates a static copy of; see generate-docs.<ext>.
-export function renderAppTs(projectName: string, framework: Framework): string {
+//
+// The default export (Vercel target only) is additive, not a replacement
+// for index.ts's serve(app) — Vercel's zero-config Hono/Express support
+// imports this file directly and calls the exported app's own request
+// handler, bypassing serve()/index.ts entirely, while index.ts (and its
+// serve() call) keeps working exactly as before for `bun run dev`/`start`
+// anywhere else. src/app.<ext> is already one of Vercel's recognized entry
+// paths — this export is the only thing it was missing.
+export function renderAppTs(projectName: string, framework: Framework, deployTarget?: DeployTarget): string {
+  const defaultExport =
+    deployTarget === "vercel"
+      ? `
+// Vercel deploys straight from this export — see vercel.json.
+export default app;
+`
+      : "";
+
   if (framework === "express") {
     return `import { createApp, serveApiDocs } from "@mednours/backon/express";
 import { endpoints } from "./endpoints";
@@ -35,7 +59,7 @@ app.use(exampleMiddleware);
 app.use("/", endpoints);
 
 serveApiDocs(app, "/docs", { title: "${projectName}" });
-`;
+${defaultExport}`;
   }
   return `import { createApp, serveApiDocs } from "@mednours/backon";
 import { endpoints } from "./endpoints";
@@ -47,6 +71,21 @@ app.use("*", exampleMiddleware);
 app.route("/", endpoints);
 
 serveApiDocs(app, "/docs", { title: "${projectName}" });
+${defaultExport}`;
+}
+
+// Vercel target only. bunVersion pins the Bun *major* version Vercel runs
+// the deployed function on (currently "1.x" is the only valid value; minor/
+// patch are managed by Vercel automatically) — kept in sync with this
+// being a Bun-first framework, so the deployed function behaves the same
+// runtime as local dev. Not required for the zero-config Hono/Express
+// detection itself (that works on Vercel's default Node runtime too), but
+// there's no reason to switch runtimes between local and deployed.
+export function renderVercelJson(): string {
+  return `{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "bunVersion": "1.x"
+}
 `;
 }
 
@@ -307,6 +346,48 @@ export function renderPackageJson(
   return `${JSON.stringify(pkg, null, 2)}\n`;
 }
 
+function renderDeploySection(deployTarget: DeployTarget | undefined, ext: string): string {
+  switch (deployTarget) {
+    case "vercel":
+      return `## Deploying
+
+Set up for [Vercel](https://vercel.com)'s zero-config Hono/Express support:
+\`src/app.${ext}\` has a default export (Vercel deploys straight from it,
+bypassing \`index.${ext}\`/\`serve()\` — those keep working locally exactly as
+before), and \`vercel.json\` pins the Bun runtime so the deployed function
+matches local dev. Connect the repo on [vercel.com/new](https://vercel.com/new)
+or run \`vercel deploy\` — no other configuration needed. \`vercel dev\` runs it
+locally the same way it'll run once deployed.
+`;
+    case "node":
+      return `## Deploying
+
+No deploy-specific files here — \`index.${ext}\` calls \`serve(app)\`, which
+listens on \`PORT\` (see \`.env.example\`) wherever it's run. That's what
+Render, Railway, Fly, a plain VPS, or any other Node/Bun host expects: point
+the platform's start command at \`bun run start\` (or \`bun run index.${ext}\`)
+and set \`PORT\`/your database env vars in its dashboard.
+`;
+    case "local":
+      return `## Deploying
+
+Not set up for a specific host — \`bun run start\` runs \`index.${ext}\`, which
+listens on \`PORT\` (see \`.env.example\`). Point any Node/Bun-capable host's
+start command at that when you're ready.
+`;
+    default:
+      return `## Deploying
+
+Not decided yet — \`index.${ext}\` already calls \`serve(app)\`, listening on
+\`PORT\` (see \`.env.example\`), which is all most Node/Bun hosts need. For
+[Vercel](https://vercel.com) specifically, add a default export to
+\`src/app.${ext}\` (\`export default app;\`) and a \`vercel.json\` with
+\`{ "bunVersion": "1.x" }\` — or re-run \`create-backon\` and pick Vercel to get
+both for free.
+`;
+  }
+}
+
 export function renderReadme(answers: Answers): string {
   const routeList = answers.routes.length
     ? answers.routes.map((route) => `- \`src/endpoints/${route}/\``).join("\n")
@@ -314,6 +395,7 @@ export function renderReadme(answers: Answers): string {
 
   const backonImport = answers.framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
   const languageLabel = answers.language === "javascript" ? "JavaScript" : "TypeScript";
+  const ext = answers.language === "javascript" ? "js" : "ts";
 
   return `# ${answers.projectName}
 
@@ -343,5 +425,6 @@ Each route folder follows the same shape: \`*.routes.${answers.language === "jav
 methods to controller functions, \`*.controller.${answers.language === "javascript" ? "js" : "ts"}\` validates the
 request (via \`defineRoute\` from \`${backonImport}\`) and calls into
 \`*.services.${answers.language === "javascript" ? "js" : "ts"}\`, which is where real data access belongs.
-`;
+
+${renderDeploySection(answers.deployTarget, ext)}`;
 }

@@ -62,7 +62,7 @@ app.post(
 
 serveApiDocs(app, "/docs", { title: "backon dev server" });
 
-serve(app);
+await serve(app);
 
 // curl http://localhost:3000/health
 // curl "http://localhost:3000/hello?name=nour"

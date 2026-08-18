@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+- `create-backon` itself now runs via `npx create-backon`/`npm create backon`, not just `bunx`/`bun create` — the published `bin` is now a real `esbuild`-bundled `dist/cli.js` (Node-valid ESM, `#!/usr/bin/env node` shebang) instead of raw `src/cli.ts`, which only Bun could execute directly (Bun runs `.ts` natively; Node can't, and can't honor a `bun` shebang either). `bun create backon`/`bunx create-backon` still work exactly the same, unaffected — same bundle either way.
+- The generated `index.ts`/`index.js` now `await`s `serve(app)` on the Hono adapter, matching `@mednours/backon` 0.7.0's `serve()` becoming async there (unaffected on the Express adapter, whose `serve()` stays synchronous).
+- New "Running a generated project without Bun" README section: `@mednours/backon` 0.7.0+ genuinely runs under Node now (`@hono/node-server`, an optional peer dependency), and `create-backon` itself runs via `npx`, but a generated project's own source still uses extensionless relative imports the way Bun's bundler-style resolution expects — plain `node index.ts` refuses those (Node's ESM loader requires real extensions, TypeScript or not). [`tsx`](https://github.com/privatenumber/tsx) resolves the same permissive way Bun does, so `npx tsx index.ts` runs a generated project under plain Node with no other changes — verified against all four framework/language combinations. Generated projects still default to Bun; this isn't a change to that default, just documentation of what's actually possible without it.
+
+## 0.8.0
+
+- Add a "Where's this headed?" prompt during scaffolding — Vercel, another Node/Bun host, local/self-hosted only, or not sure yet. Picking Vercel adds a default export to `src/app.<ext>` (`export default app;`, additive — `index.<ext>`'s `serve()` keeps working locally exactly as before) so Vercel's zero-config Hono/Express support deploys it directly, a `vercel.json` pinning the Bun runtime (`{ "bunVersion": "1.x" }`), `.vercel` in `.gitignore`, and a "Deploying" section in the generated README. The other three answers don't change any generated code — `index.<ext>` already calls `serve(app)`, which listens on `PORT` and works on any Node/Bun host as-is — they only change what the README's "Deploying" section says. `deployTarget` is optional on the `Answers` type generateProject() takes, defaulting to the same behavior as "local"/"not sure yet".
+
 ## 0.7.0
 
 - Add `add-method` — an interactive command for building up one endpoint's HTTP methods at a time, separate from `add-route`/`remove-route` (which stay simple whole-folder create/delete). Opens with a dashboard of every mounted endpoint and the methods it already has (colored by verb), then walks through endpoint, verb, path, name, and whether the method validates a body/query — path params are auto-derived from the path itself, body/query schemas start as a `TODO`-commented `z.object({})` like the rest of the generated scaffolding. Loops until told to stop.

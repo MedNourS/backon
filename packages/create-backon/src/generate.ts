@@ -12,6 +12,7 @@ import {
   renderPackageJson,
   renderReadme,
   renderTsconfig,
+  renderVercelJson,
 } from "./templates/base";
 import { renderBlankController, renderBlankRoutes, renderBlankServices } from "./templates/route";
 import { renderDbFile } from "./templates/db";
@@ -91,8 +92,13 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
       ? [join(root, "jsconfig.json"), renderJsconfig()]
       : [join(root, "tsconfig.json"), renderTsconfig()],
     [join(root, "README.md"), renderReadme(readmeAnswers)],
-    [join(root, ".gitignore"), "node_modules/\ndist/\n*.log\n.env\n.env.local\nopenapi.json\ndocs.html\n"],
-    [join(root, `src/app.${ext}`), renderAppTs(packageName, answers.framework)],
+    [
+      join(root, ".gitignore"),
+      `node_modules/\ndist/\n*.log\n.env\n.env.local\nopenapi.json\ndocs.html\n${
+        answers.deployTarget === "vercel" ? ".vercel\n" : ""
+      }`,
+    ],
+    [join(root, `src/app.${ext}`), renderAppTs(packageName, answers.framework, answers.deployTarget)],
     [join(root, `src/config/db.${ext}`), renderDbFile(answers.db)],
     [
       join(root, `src/middleware/example.middleware.${ext}`),
@@ -100,6 +106,9 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     ],
     [join(root, `src/endpoints/index.${ext}`), renderEndpointsIndex(answers.framework, answers.routes)],
     [join(root, `scripts/generate-docs.${ext}`), renderGenerateDocsScript(packageName, answers.framework)],
+    ...(answers.deployTarget === "vercel"
+      ? ([[join(root, "vercel.json"), renderVercelJson()]] as Array<[string, string]>)
+      : []),
   ];
 
   // Every route starts blank (no methods wired) — `bun run add-method` adds

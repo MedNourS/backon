@@ -1,0 +1,43 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The base tsconfig.json is for typechecking only (noEmit: true, types
+    // include "bun" for the source files that reference Bun's globals).
+    // This one produces the dist/ that Node consumers import via
+    // package.json's "default" export condition — Bun consumers resolve
+    // the "bun" condition straight to src/*.ts instead and never touch
+    // dist/ at all.
+    //
+    // tsc here only emits declarations (.d.ts) — the actual .js comes from
+    // esbuild instead (see the package.json "build" script). Reason: this
+    // package's source uses extensionless relative imports throughout
+    // ("./create-app", not "./create-app.js" or "./create-app.ts"), which
+    // "bundler" moduleResolution (correctly) allows but which plain Node
+    // ESM's runtime resolver rejects outright — Node requires a real file
+    // extension on every relative import, no exceptions. tsc has no
+    // "moduleResolution": "bundler" + "emit Node-valid extensioned JS"
+    // combination that bridges that gap; esbuild's bundler does, by
+    // inlining this package's own internal imports into each entry point's
+    // single output file, so no relative import is left in the emitted JS
+    // to resolve at all. Declaration files don't have this problem — .d.ts
+    // resolution is TypeScript's own, more lenient algorithm, not Node's
+    // runtime one — so tsc handles those directly, mirroring the source
+    // tree file-for-file the normal way.
+    "moduleResolution": "bundler",
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": true,
+    "rootDir": "src",
+    "outDir": "dist"
+    // "types": ["bun"] is inherited from tsconfig.json — still needed here
+    // even for a Node-facing build, since serve.ts and websocket.ts
+    // reference the ambient `Bun` global (guarded by a
+    // `typeof Bun !== "undefined"` runtime check) to detect which runtime
+    // they're on. That's only a compile-time identifier resolution — none
+    // of @types/bun's types end up in the emitted .d.ts, since nothing in
+    // this package's public function signatures is itself Bun-typed.
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

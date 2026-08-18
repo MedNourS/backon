@@ -3,6 +3,7 @@ import * as p from "@clack/prompts";
 export type DbChoice = "neon" | "postgres" | "sqlite" | "none";
 export type Framework = "hono" | "express";
 export type Language = "typescript" | "javascript";
+export type DeployTarget = "vercel" | "node" | "local" | "undecided";
 
 export interface Answers {
   projectName: string;
@@ -11,6 +12,11 @@ export interface Answers {
   db: DbChoice;
   routes: string[];
   copyEnv: boolean;
+  // Optional, defaults to "undecided" wherever it's read — generateProject()
+  // and its templates all treat a missing value the same as "undecided", so
+  // existing callers that build an Answers object without this field (tests,
+  // any external embedder) keep working unchanged.
+  deployTarget?: DeployTarget;
 }
 
 function bail(): never {
@@ -72,6 +78,25 @@ export async function runPrompts(): Promise<Answers> {
   });
   if (p.isCancel(db)) bail();
 
+  const deployTarget = await p.select({
+    message: "Where's this headed?",
+    options: [
+      {
+        value: "vercel",
+        label: "Vercel",
+        hint: "adds vercel.json + a default export so it deploys with zero config",
+      },
+      {
+        value: "node",
+        label: "Another Node/Bun host",
+        hint: "Render, Railway, Fly, a VPS — index.ts's serve() already listens on PORT, nothing extra needed",
+      },
+      { value: "local", label: "Local / self-hosted only", hint: "no deploy scaffolding added" },
+      { value: "undecided", label: "Not sure yet", hint: "same as local for now — figure it out later" },
+    ],
+  });
+  if (p.isCancel(deployTarget)) bail();
+
   const copyEnv = await p.confirm({
     message: "Create .env from .env.example now?",
     initialValue: true,
@@ -100,5 +125,6 @@ export async function runPrompts(): Promise<Answers> {
     db: db as DbChoice,
     routes,
     copyEnv: copyEnv as boolean,
+    deployTarget: deployTarget as DeployTarget,
   };
 }

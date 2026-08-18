@@ -1,8 +1,8 @@
 {
   "name": "@mednours/backon",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
-  "description": "Opinionated backend framework wrapper for Bun. Wraps Hono (default) or Express (via @mednours/backon/express) with the same baked-in security, logging, and validation defaults.",
+  "description": "Opinionated backend framework wrapper, Bun-first but Node-compatible. Wraps Hono (default) or Express (via @mednours/backon/express) with the same baked-in security, logging, and validation defaults.",
   "license": "MIT",
   "homepage": "https://github.com/mednours/backon/tree/main/packages/backon#readme",
   "repository": {
@@ -12,23 +12,36 @@
   },
   "bugs": "https://github.com/mednours/backon/issues",
   "engines": {
-    "bun": ">=1.3.0"
+    "bun": ">=1.3.0",
+    "node": ">=18.14.1"
   },
   "publishConfig": {
     "access": "public"
   },
-  "module": "src/index.ts",
-  "types": "src/index.ts",
+  "module": "dist/index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./express": "./src/express/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./express": {
+      "bun": "./src/express/index.ts",
+      "types": "./dist/express/index.d.ts",
+      "default": "./dist/express/index.js"
+    }
   },
-  "files": ["src"],
+  "files": ["src", "dist"],
   "scripts": {
     "dev": "bun run --watch examples/dev-server.ts",
     "dev:express": "bun run --watch examples/dev-server-express.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && bun run build:js",
+    "build:js": "esbuild src/index.ts src/express/index.ts --outdir=dist --outbase=src --bundle --platform=node --format=esm --target=node18 --packages=external",
+    "prepublishOnly": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "hono": "^4.6.14",
@@ -42,31 +55,49 @@
     "helmet": "^8.0.0",
     "compression": "^1.7.5",
     "ws": "^8.18.0",
-    "multer": "^1.4.5"
+    "multer": "^1.4.5",
+    "@hono/node-server": "^2.0.0"
   },
   "peerDependenciesMeta": {
-    "express": { "optional": true },
-    "cors": { "optional": true },
-    "helmet": { "optional": true },
-    "compression": { "optional": true },
-    "ws": { "optional": true },
-    "multer": { "optional": true }
+    "express": {
+      "optional": true
+    },
+    "cors": {
+      "optional": true
+    },
+    "helmet": {
+      "optional": true
+    },
+    "compression": {
+      "optional": true
+    },
+    "ws": {
+      "optional": true
+    },
+    "multer": {
+      "optional": true
+    },
+    "@hono/node-server": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@hono/node-server": "^2.1.1",
     "@types/bun": "latest",
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
     "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
     "@types/supertest": "^6.0.2",
     "@types/ws": "^8.5.13",
-    "@types/multer": "^1.4.12",
-    "typescript": "^5.7.2",
-    "express": "^4.21.0",
-    "cors": "^2.8.5",
-    "helmet": "^8.0.0",
     "compression": "^1.7.5",
-    "ws": "^8.18.0",
+    "cors": "^2.8.5",
+    "esbuild": "^0.28.2",
+    "express": "^4.21.0",
+    "helmet": "^8.0.0",
     "multer": "^1.4.5-lts.1",
-    "supertest": "^7.0.0"
+    "supertest": "^7.0.0",
+    "typescript": "^5.7.2",
+    "ws": "^8.18.0"
   }
 }

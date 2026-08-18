@@ -75,7 +75,7 @@ app.get(
   )
 );
 
-serve(app);
+await serve(app);
 ```
 
 `createApp()` produces an app with logging/security/CORS/compression already wired in and a `/health` route for free. `defineRoute()` validates the request against a Zod schema before the handler ever runs — a bad query/body/params gets the caller a `400` with the validation error attached, automatically, with no separate check to write. `serve()` starts it and wires graceful shutdown.

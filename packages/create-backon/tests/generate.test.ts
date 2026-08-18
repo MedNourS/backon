@@ -60,6 +60,23 @@ describe("generateProject", () => {
     );
     expect(generateDocs).toContain('import { app } from "../src/app";');
     expect(generateDocs).toContain('title: "my-api"');
+
+    // Hono's serve() is async as of @mednours/backon 0.7.0 — index.ts
+    // awaits it. Top-level await is safe here since generated projects are
+    // ESM ("type": "module" in their own package.json).
+    const indexTs = await readFile(join(root, "index.ts"), "utf-8");
+    expect(indexTs).toContain("await serve(app);");
+  });
+
+  it("does not await serve() for the Express adapter, which stays synchronous", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: "my-api", framework: "express", language: "typescript", db: "none", routes: [], copyEnv: false },
+      cwd
+    );
+    const indexTs = await readFile(join(root, "index.ts"), "utf-8");
+    expect(indexTs).toContain("serve(app);");
+    expect(indexTs).not.toContain("await serve(app);");
   });
 
   it("writes controller/routes/services per route and wires endpoints/index.ts (hono)", async () => {
@@ -258,6 +275,84 @@ describe("generateProject", () => {
         cwd
       )
     ).rejects.toThrow(/already has files/);
+  });
+
+  it("adds a default export and vercel.json when deployTarget is vercel", async () => {
+    const cwd = await makeTmpDir();
+    const { root, filesWritten } = await generateProject(
+      {
+        projectName: "my-api",
+        framework: "hono",
+        language: "typescript",
+        db: "none",
+        routes: [],
+        copyEnv: false,
+        deployTarget: "vercel",
+      },
+      cwd
+    );
+
+    expect(filesWritten.length).toBe(12); // one more than the base skeleton — vercel.json
+
+    const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
+    expect(appTs).toContain("export default app;");
+
+    const vercelJson = JSON.parse(await readFile(join(root, "vercel.json"), "utf-8"));
+    expect(vercelJson.bunVersion).toBe("1.x");
+
+    const gitignore = await readFile(join(root, ".gitignore"), "utf-8");
+    expect(gitignore).toContain(".vercel");
+
+    const readme = await readFile(join(root, "README.md"), "utf-8");
+    expect(readme).toContain("## Deploying");
+    expect(readme).toContain("vercel.json");
+  });
+
+  it("adds a default export for express too when deployTarget is vercel", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      {
+        projectName: "my-api",
+        framework: "express",
+        language: "typescript",
+        db: "none",
+        routes: [],
+        copyEnv: false,
+        deployTarget: "vercel",
+      },
+      cwd
+    );
+    const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
+    expect(appTs).toContain("export default app;");
+  });
+
+  it("skips the default export and vercel.json for every non-vercel deployTarget, including unset", async () => {
+    for (const deployTarget of ["node", "local", "undecided", undefined] as const) {
+      const cwd = await makeTmpDir();
+      const { root, filesWritten } = await generateProject(
+        {
+          projectName: "my-api",
+          framework: "hono",
+          language: "typescript",
+          db: "none",
+          routes: [],
+          copyEnv: false,
+          deployTarget,
+        },
+        cwd
+      );
+
+      expect(filesWritten.length).toBe(11);
+      const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
+      expect(appTs).not.toContain("export default app;");
+      await expect(readFile(join(root, "vercel.json"), "utf-8")).rejects.toThrow();
+
+      const gitignore = await readFile(join(root, ".gitignore"), "utf-8");
+      expect(gitignore).not.toContain(".vercel");
+
+      const readme = await readFile(join(root, "README.md"), "utf-8");
+      expect(readme).toContain("## Deploying");
+    }
   });
 
   it("writes .env from .env.example when copyEnv is true, and skips it when false", async () => {

@@ -1,4 +1,12 @@
-#!/usr/bin/env bun
+// No shebang here on purpose — the published bin is the bundled
+// dist/cli.js esbuild produces (see package.json's "build" script), which
+// gets its own "#!/usr/bin/env node" shebang from esbuild's --banner flag.
+// A shebang on *this* file would end up duplicated as the bundle's second
+// line (esbuild carries a source shebang straight through), which Node
+// rejects outright — a shebang only means anything as a file's literal
+// first line. Local dev (`bun run src/cli.ts`, the "start" script) doesn't
+// need a shebang either; `bun run` executes the given file directly, it
+// doesn't rely on the OS reading a shebang the way `./cli.ts` would.
 import * as p from "@clack/prompts";
 import { runPrompts } from "./prompts";
 import { generateProject } from "./generate";

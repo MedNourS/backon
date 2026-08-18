@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+**Breaking:** `serve(app)` (Hono adapter) is now `async` — `await` it. The Express adapter's `serve()` is unaffected, still synchronous.
+
+- The Hono adapter now runs on Node too, not just Bun: `serve(app)` runs `Bun.serve()` when the process is on Bun (the default, and the faster of the two), or [`@hono/node-server`](https://github.com/honojs/node-server)'s `serve()` when it's on Node instead, detected automatically at call time. `@hono/node-server` is a new *optional* peer dependency — install it yourself (`npm install @hono/node-server`) only if the app actually runs on Node; Bun-only projects need nothing extra. `serve()` had to become async to support this — it dynamically imports whichever of `hono/bun`/`@hono/node-server` the current runtime actually needs, rather than a static import that would otherwise crash at *module load time* under whichever runtime it doesn't match (`hono/bun` touches Bun's global the moment it's imported, which used to make importing `@mednours/backon` at all — not just calling `serve()` — throw immediately under Node, since `defineWebSocket` statically imported it and `index.ts` re-exports `defineWebSocket`).
+- `defineWebSocket()` (Hono adapter) still only actually works on Bun — there's no Node equivalent wired up yet — but a route registered with it now throws a clear error the moment it's hit under Node, instead of crashing the whole package at import time regardless of whether the route is ever used.
+- This package now ships a real `dist/` build for Node consumers (`tsc` for declarations, `esbuild` for the actual JS — plain `tsc` alone can't emit Node-valid ESM here, since the source's extensionless relative imports are fine under `moduleResolution: "bundler"` but rejected outright by Node's runtime resolver). Bun consumers are unaffected: package.json's new `"bun"` export condition resolves straight to this package's TypeScript source, same zero-build-step experience as before. This was a real gap, not just an unused code path — Node explicitly refuses its own native TypeScript execution for anything under `node_modules`, so previously, an `@mednours/backon` `dependencies` entry could not be imported under Node *at all*, regardless of `serve()`.
+- `engines` now lists `"node": ">=18.14.1"` alongside the existing `"bun": ">=1.3.0"` — the floor `@hono/node-server` itself supports.
+
 ## 0.6.0
 
 - Fix: the rendered reference page (`apiReferenceHtml()`, `apiReferenceHtmlInline()`, and `serveApiDocs()`'s own `/docs` route) showed a "Developer Tools" toolbar with Configure/Share/Deploy buttons above the content on `localhost` — Scalar's `showDeveloperTools` option defaults to `"localhost"`, and it's promotion for Scalar's own hosted account, unrelated to the document being viewed. Now set to `"never"` by default.
