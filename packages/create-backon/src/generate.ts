@@ -6,6 +6,7 @@ import {
   renderEndpointsIndex,
   renderEnvExample,
   renderExampleMiddleware,
+  renderGenerateClientScript,
   renderGenerateDocsScript,
   renderIndexTs,
   renderJsconfig,
@@ -94,7 +95,7 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     [join(root, "README.md"), renderReadme(readmeAnswers)],
     [
       join(root, ".gitignore"),
-      `node_modules/\ndist/\n*.log\n.env\n.env.local\nopenapi.json\ndocs.html\n${
+      `node_modules/\ndist/\n*.log\n.env\n.env.local\nopenapi.json\ndocs.html\nclient/\n${
         answers.deployTarget === "vercel" ? ".vercel\n" : ""
       }`,
     ],
@@ -106,6 +107,7 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     ],
     [join(root, `src/endpoints/index.${ext}`), renderEndpointsIndex(answers.framework, answers.routes)],
     [join(root, `scripts/generate-docs.${ext}`), renderGenerateDocsScript(packageName, answers.framework)],
+    [join(root, `scripts/generate-client.${ext}`), renderGenerateClientScript(answers.language)],
     ...(answers.deployTarget === "vercel"
       ? ([[join(root, "vercel.json"), renderVercelJson()]] as Array<[string, string]>)
       : []),

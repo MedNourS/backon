@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { editSource, ensureImports, appendStatements } from "./ast-edit";
 import { detectProject } from "./detect";
 import { parseMountedRoutes, readEndpointsIndex } from "./endpoints-index";
 import { parseRouteMethods } from "./route-methods";
@@ -19,31 +20,14 @@ export interface AddMethodResult {
 }
 
 // The exact placeholder comment each blank file starts with — see
-// templates/route.ts. Stripped the first time a real method lands, wherever
-// it happens to sit in the file (start of controller.ts/services.ts, but
-// mid-file in routes.ts, after the Router()/Hono() line).
+// templates/route.ts. Stripped as plain text before the AST layer below
+// ever sees the file: a file that's only a comment (no statements yet) has
+// nothing for ensureImports()/appendStatements() to attach it to, and this
+// comment isn't code that needs AST-accurate handling anyway.
 const PLACEHOLDER_PATTERN = /\/\/ No (?:routes|methods) yet[^\n]*\n\n?/;
 
 function stripPlaceholder(content: string): string {
   return content.replace(PLACEHOLDER_PATTERN, "");
-}
-
-/** Inserts any of importLines not already present, right after the file's existing leading import block. */
-function ensureImports(content: string, importLines: string[]): string {
-  const stripped = stripPlaceholder(content);
-  const missing = importLines.filter((line) => !stripped.includes(line));
-  if (missing.length === 0) return stripped;
-
-  const lines = stripped.split("\n");
-  let insertAt = 0;
-  while (insertAt < lines.length && lines[insertAt]?.startsWith("import ")) insertAt++;
-  lines.splice(insertAt, 0, ...missing);
-  return lines.join("\n");
-}
-
-function appendBlock(content: string, block: string): string {
-  const trimmed = content.replace(/\n+$/, "");
-  return trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
 }
 
 /**
@@ -55,6 +39,13 @@ function appendBlock(content: string, block: string): string {
  * the route mount line. All three files are read fresh off disk first, so
  * this is safe to call repeatedly, or after the previous method's stub was
  * hand-edited.
+ *
+ * Every file edit goes through ast-edit.ts's ts-morph helpers: an import is
+ * only added if the real AST doesn't already have one covering it (not
+ * whether an identical line of text happens to appear anywhere), and the
+ * new method's code is appended as real parsed statements rather than
+ * spliced-in text — so this stays correct even if the file was previously
+ * hand-reformatted in a way that would have thrown off a text-based check.
  */
 export async function addMethod(route: string, spec: MethodSpec, cwd: string = process.cwd()): Promise<AddMethodResult> {
   const { root, framework, language, ext } = await detectProject(cwd);
@@ -84,12 +75,20 @@ export async function addMethod(route: string, spec: MethodSpec, cwd: string = p
     throw new Error(`${spec.verb.toUpperCase()} ${spec.path} is already mounted in ${routesPath}.`);
   }
 
-  const newController = appendBlock(ensureImports(controllerContents, controllerImports(route, framework)), renderControllerMethod(spec));
-  const newRoutes = appendBlock(
-    ensureImports(routesContents, [`import * as controller from "./${route}.controller";`]),
-    routeMountLine(route, spec)
-  );
-  const newServices = appendBlock(ensureImports(servicesContents, serviceImports(route, spec, language)), renderServiceMethod(spec, language));
+  const newController = editSource(controllerPath, stripPlaceholder(controllerContents), (project, sourceFile) => {
+    ensureImports(sourceFile, project, controllerImports(route, framework));
+    appendStatements(sourceFile, renderControllerMethod(spec));
+  });
+
+  const newRoutes = editSource(routesPath, stripPlaceholder(routesContents), (project, sourceFile) => {
+    ensureImports(sourceFile, project, [`import * as controller from "./${route}.controller";`]);
+    appendStatements(sourceFile, routeMountLine(route, spec));
+  });
+
+  const newServices = editSource(servicesPath, stripPlaceholder(servicesContents), (project, sourceFile) => {
+    ensureImports(sourceFile, project, serviceImports(route, spec, language));
+    appendStatements(sourceFile, renderServiceMethod(spec, language));
+  });
 
   await Promise.all([
     writeFile(controllerPath, newController),

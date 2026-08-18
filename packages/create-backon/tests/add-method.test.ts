@@ -121,6 +121,26 @@ describe("addMethod", () => {
     expect(routes).toContain('usersRoutes.get("/:id", controller.getById);');
   });
 
+  it("doesn't duplicate an import that's already there in a hand-reformatted shape", async () => {
+    const root = await makeBlankHonoProject();
+    await addMethod("users", { verb: "get", path: "/", name: "list", needsBody: false, needsQuery: false }, root);
+
+    // Old text-based ensureImports() checked whether the exact generated
+    // line appeared anywhere in the file — reformatted to single quotes and
+    // no semicolon, it would no longer match and a second, duplicate import
+    // would get added. AST-based ensureImports() checks the real import
+    // structure instead, so this stays recognized as already covering it.
+    const controllerPath = join(root, "src/endpoints/users/users.controller.ts");
+    const original = await readFile(controllerPath, "utf-8");
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(controllerPath, original.replace('import { z } from "zod";', "import { z } from 'zod'"));
+
+    await addMethod("users", { verb: "post", path: "/", name: "create", needsBody: true, needsQuery: false }, root);
+
+    const controller = await readFile(controllerPath, "utf-8");
+    expect(controller.match(/import \{ z \} from ['"]zod['"];?/g)?.length).toBe(1);
+  });
+
   it("refuses a duplicate method name", async () => {
     const root = await makeBlankHonoProject();
     await addMethod("users", { verb: "get", path: "/", name: "list", needsBody: false, needsQuery: false }, root);

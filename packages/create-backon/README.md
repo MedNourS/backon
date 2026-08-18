@@ -104,7 +104,19 @@ and regenerates `src/endpoints/index.ts` so the new route is mounted next
 to the ones that were already there. It refuses to run outside a backon
 project, refuses a route name whose folder already exists, and refuses a
 name that's already mounted. Run `add-method` next to give the new route
-an actual GET/POST/etc.
+an actual GET/POST/etc — or add `--crud` to wire up the standard five in
+one go instead of one at a time:
+
+```
+bun run add-route users --crud
+```
+
+Adds `list` (GET /), `create` (POST /), `getById` (GET /:id), `update`
+(PUT /:id), and `remove` (DELETE /:id) right after creating the route —
+the exact same names `add-method`'s own suggestions already default to,
+just all five at once. Leave `--crud` off (or say no to the "Scaffold
+standard CRUD methods now?" prompt when running `add-route` with no name)
+to get the usual blank endpoint instead.
 
 ## Adding a method to a route
 
@@ -132,6 +144,13 @@ everywhere else in the generated code, for filling in by hand. Loops until
 told to stop, so a whole endpoint's worth of methods is normally one
 `bun run add-method` session. Refuses a method name or a verb+path pair
 that's already there.
+
+Every file edit here (and in `remove-method`, below) goes through a real
+TypeScript/JavaScript AST ([ts-morph](https://ts-morph.com)) rather than
+matching raw text — an import is recognized as already present by its
+actual structure, and a method's own statements are found by the exact
+name `add-method` already enforces is unique per endpoint. A hand-reformatted
+mount line or import doesn't throw either operation off.
 
 ## Removing a route
 
@@ -206,7 +225,8 @@ bun run server-config
 or `bunx create-backon server-config`. The interactive alternative to
 running `add-route`/`add-method`/`remove-route` individually — opens with
 the same endpoint dashboard `project` shows, then a menu: add a new
-endpoint, remove one, add a method, remove a method, or modify a method
+endpoint (with the same "scaffold standard CRUD methods now?" prompt
+`add-route` offers), remove one, add a method, remove a method, or modify a method
 (change its path, name, or body/query validation in place — the one thing
 none of the standalone commands offer, since it's a checked
 remove-then-re-add rather than a new codegen path). Loops back to the menu
@@ -241,6 +261,37 @@ This is separate from `serveApiDocs(app)` (documented in
 same spec and reference page as live routes on a running server instead of
 writing them to disk — useful for CI, static hosting, or feeding the spec
 into an external tool, where `serveApiDocs`'s live routes don't apply.
+
+## Generating a typed API client
+
+Every generated project also includes:
+
+```
+bun run generate-client
+```
+
+Writes `client/api.<ext>` — a fetch client with one function per mounted
+method, grouped by endpoint (`usersApi.list()`, `usersApi.create(body)`,
+`usersApi.getById(id)`, and so on), read directly off `*.routes.<ext>`/
+`*.controller.<ext>` — the same files `add-method`/`remove-method`/
+`server-config` already write, so there's nothing to keep in sync by hand.
+Backed by `scripts/generate-client.<ext>`, generated alongside everything
+else; unlike `generate-docs.<ext>` it doesn't import `src/app` — it reads
+the endpoint files directly, so it can't fail because `app.ts` throws on a
+missing env var. It also never goes stale on its own: it re-discovers
+routes fresh every time it *runs*, so only its output needs a re-run after
+routes or methods change, not the script itself.
+
+In TypeScript projects, each generated function's body/query parameters
+are typed via `z.infer<typeof theSchema>` against the schema the
+controller already exports — imported by type, not re-declared, so the
+client's argument types can't drift from what `defineRoute()` actually
+validates. Response shape is deliberately not claimed beyond an optional
+`<T = unknown>` generic per call (`usersApi.list<User[]>()`) — backon
+doesn't validate responses, so nothing here pretends to know a shape it
+can't verify. JavaScript projects get the same functions with no type
+annotations. `client/` is a build artifact like `openapi.json`/`docs.html`,
+not source, so it's in the generated `.gitignore` by default.
 
 ## Deploying to Vercel
 

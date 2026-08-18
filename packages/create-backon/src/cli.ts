@@ -18,6 +18,7 @@ import { addMethod } from "./add-method";
 import { removeMethod } from "./remove-method";
 import { detectDbStatus } from "./db-status";
 import { detectProject } from "./detect";
+import { addCrudMethods } from "./crud-scaffold";
 import {
   detectMethodValidation,
   formatEndpointsDashboard,
@@ -58,17 +59,42 @@ async function promptForRouteName(introText: string): Promise<string> {
   return answer;
 }
 
-async function runAddRoute(args: string[]): Promise<void> {
-  let [name] = args;
+/** Shared by every "just added a CRUD set" log line, interactive or scripted. */
+function logCrudResult(result: Awaited<ReturnType<typeof addCrudMethods>>): void {
+  const skippedNote = result.skipped.length ? ` (skipped, already there: ${result.skipped.join(", ")})` : "";
+  p.log.success(`Added CRUD methods to ${result.route}: ${result.added.join(", ") || "none"}${skippedNote}`);
+}
 
+async function runAddRoute(args: string[]): Promise<void> {
+  const crudFlagIndex = args.indexOf("--crud");
+  const withCrud = crudFlagIndex !== -1;
+  const positional = withCrud ? args.filter((_, i) => i !== crudFlagIndex) : args;
+  let [name] = positional;
+
+  let interactive = false;
   if (!name) {
+    interactive = true;
     name = await promptForRouteName("create-backon add-route");
     p.outro(`Adding ${name}...`);
   }
 
   const { route, root, filesWritten } = await addRoute(name);
   p.log.success(`Added src/endpoints/${route} (${filesWritten.length} files, no methods yet) in ${root}`);
-  p.log.info("Run `bun run add-method` to give it a GET/POST/etc.");
+
+  let scaffoldCrud = withCrud;
+  if (!withCrud && interactive) {
+    const answer = await p.confirm({
+      message: "Scaffold standard CRUD methods now (list, create, getById, update, remove)?",
+      initialValue: false,
+    });
+    scaffoldCrud = !p.isCancel(answer) && answer;
+  }
+
+  if (scaffoldCrud) {
+    logCrudResult(await addCrudMethods(route, root));
+  } else {
+    p.log.info("Run `bun run add-method` to give it a GET/POST/etc.");
+  }
 }
 
 async function runRemoveRoute(args: string[]): Promise<void> {
@@ -280,6 +306,14 @@ async function serverConfigAddEndpoint(): Promise<void> {
   }
   const { route, filesWritten } = await addRoute(name);
   p.log.success(`Added src/endpoints/${route} (${filesWritten.length} files, no methods yet).`);
+
+  const scaffoldCrud = await p.confirm({
+    message: "Scaffold standard CRUD methods now (list, create, getById, update, remove)?",
+    initialValue: false,
+  });
+  if (!p.isCancel(scaffoldCrud) && scaffoldCrud) {
+    logCrudResult(await addCrudMethods(route));
+  }
 }
 
 async function serverConfigRemoveEndpoint(summaries: EndpointSummary[]): Promise<void> {

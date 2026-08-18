@@ -103,4 +103,78 @@ describe("removeMethod", () => {
 
     await expect(removeMethod("users", "delete", "/:id", root)).rejects.toThrow(/isn't mounted/);
   });
+
+  it("doesn't leave the removed method's TODO comment orphaned onto the next method", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: ".", framework: "hono", language: "typescript", db: "none", routes: [], copyEnv: false },
+      cwd
+    );
+    await addRoute("users", root);
+    // "create" gets a leading "// TODO: replace with the real shape of ..."
+    // comment directly above its body schema const, immediately followed
+    // (no blank line) by "getById"'s own params schema const — the exact
+    // adjacency that used to leave "create"'s comment behind, reattached to
+    // "getById", once "create" itself was removed.
+    await addMethod("users", { verb: "post", path: "/", name: "create", needsBody: true, needsQuery: false }, root);
+    await addMethod("users", { verb: "get", path: "/:id", name: "getById", needsBody: false, needsQuery: false }, root);
+
+    await removeMethod("users", "post", "/", root);
+
+    const controller = await readFile(join(root, "src/endpoints/users/users.controller.ts"), "utf-8");
+    expect(controller).not.toContain("create");
+    expect(controller).not.toContain('replace with the real shape of "create"');
+    expect(controller).toContain("export const getById");
+  });
+
+  it("removes only the removed method's own schema-type import from services.ts, leaving other methods' imports intact", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: ".", framework: "hono", language: "typescript", db: "none", routes: [], copyEnv: false },
+      cwd
+    );
+    await addRoute("users", root);
+    await addMethod("users", { verb: "post", path: "/", name: "create", needsBody: true, needsQuery: false }, root);
+    await addMethod(
+      "users",
+      { verb: "put", path: "/:id", name: "update", needsBody: true, needsQuery: false },
+      root
+    );
+
+    await removeMethod("users", "post", "/", root);
+
+    const services = await readFile(join(root, "src/endpoints/users/users.services.ts"), "utf-8");
+    expect(services).not.toContain("createBodySchema");
+    expect(services).not.toContain("export async function create");
+    expect(services).toContain("updateBodySchema");
+    expect(services).toContain("export async function update");
+  });
+
+  it("finds and removes a mount line even after it's been hand-reformatted, as long as parseRouteMethods can still see it", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: ".", framework: "hono", language: "typescript", db: "none", routes: [], copyEnv: false },
+      cwd
+    );
+    await addRoute("users", root);
+    await addMethod("users", { verb: "post", path: "/", name: "create", needsBody: false, needsQuery: false }, root);
+    await addMethod("users", { verb: "get", path: "/:id", name: "getById", needsBody: false, needsQuery: false }, root);
+
+    // Old text-block removal matched the mount line by exact string
+    // equality against routeMountLine()'s own literal output — a trailing
+    // comment like this would have made it silently fail to find anything
+    // to remove. AST-based removal matches by the controller.<name>
+    // reference itself, so this keeps working.
+    const routesPath = join(root, "src/endpoints/users/users.routes.ts");
+    const original = await readFile(routesPath, "utf-8");
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(routesPath, original.replace('usersRoutes.post("/", controller.create);', 'usersRoutes.post("/", controller.create); // reformatted by hand'));
+
+    const { removed } = await removeMethod("users", "post", "/", root);
+    expect(removed.name).toBe("create");
+
+    const routes = await readFile(routesPath, "utf-8");
+    expect(routes).not.toContain("controller.create");
+    expect(routes).toContain('usersRoutes.get("/:id", controller.getById);');
+  });
 });

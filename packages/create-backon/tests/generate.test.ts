@@ -28,7 +28,7 @@ describe("generateProject", () => {
     );
 
     expect(root).toBe(join(cwd, "my-api"));
-    expect(filesWritten.length).toBe(11);
+    expect(filesWritten.length).toBe(12);
 
     const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
     expect(appTs).toContain('import { createApp, serveApiDocs } from "@mednours/backon"');
@@ -53,6 +53,11 @@ describe("generateProject", () => {
     expect(pkgJson.scripts.project).toBe("bunx create-backon project");
     expect(pkgJson.scripts["server-config"]).toBe("bunx create-backon server-config");
     expect(pkgJson.scripts.docs).toBe("bun run scripts/generate-docs.ts");
+    expect(pkgJson.scripts["generate-client"]).toBe("bun run scripts/generate-client.ts");
+
+    // The generate-client script reads src/endpoints/ directly, no live app import needed.
+    const generateClient = await readFile(join(root, "scripts/generate-client.ts"), "utf-8");
+    expect(generateClient).toContain("Regenerates client/api.ts from src/endpoints/");
 
     // The docs script imports the app directly (not through index.ts), so it
     // never starts a real server just to read the route table.
@@ -238,7 +243,7 @@ describe("generateProject", () => {
     );
 
     expect(root).toBe(cwd);
-    expect(filesWritten.length).toBe(11);
+    expect(filesWritten.length).toBe(12);
 
     // package.json's "name" falls back to the directory's own basename,
     // not the literal ".", since "." isn't a valid npm package name.
@@ -294,7 +299,7 @@ describe("generateProject", () => {
       cwd
     );
 
-    expect(filesWritten.length).toBe(12); // one more than the base skeleton — vercel.json
+    expect(filesWritten.length).toBe(13); // one more than the base skeleton — vercel.json
 
     const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
     expect(appTs).toContain("export default app;");
@@ -344,7 +349,7 @@ describe("generateProject", () => {
         cwd
       );
 
-      expect(filesWritten.length).toBe(11);
+      expect(filesWritten.length).toBe(12);
       const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
       expect(appTs).not.toContain("export default app;");
       await expect(readFile(join(root, "vercel.json"), "utf-8")).rejects.toThrow();
@@ -363,7 +368,7 @@ describe("generateProject", () => {
       { projectName: ".", framework: "hono", language: "typescript", db: "sqlite", routes: [], copyEnv: true },
       cwdWith
     );
-    expect(filesWritten.length).toBe(12); // one more than the copyEnv:false base skeleton
+    expect(filesWritten.length).toBe(13); // one more than the copyEnv:false base skeleton
     const env = await readFile(join(rootWith, ".env"), "utf-8");
     const envExample = await readFile(join(rootWith, ".env.example"), "utf-8");
     expect(env).toBe(envExample);

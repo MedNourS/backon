@@ -1,9 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { editSource, removeControllerMethod, removeRouteMount, removeServiceMethod } from "./ast-edit";
 import { detectProject } from "./detect";
 import { parseMountedRoutes, readEndpointsIndex } from "./endpoints-index";
 import { parseRouteMethods } from "./route-methods";
-import { renderBlankController, renderBlankRoutes, renderBlankServices, routeMountLine, type HttpVerb } from "./templates/route";
+import { renderBlankController, renderBlankRoutes, renderBlankServices, type HttpVerb } from "./templates/route";
 
 export interface RemoveMethodResult {
   route: string;
@@ -12,31 +13,24 @@ export interface RemoveMethodResult {
 }
 
 /**
- * addMethod() appends each method as its own \n\n-delimited block (see
- * appendBlock() in add-method.ts) — imports/the Router()-or-Hono()
- * declaration are their own leading block, then one block per method, in
- * insertion order, nothing else in between. That's what makes this safe:
- * find the one block matching the predicate and drop it, leaving every
- * other block (including the leading one) untouched.
- */
-function removeBlock(content: string, matches: (block: string) => boolean): string {
-  const blocks = content.split(/\n\n+/);
-  const index = blocks.findIndex(matches);
-  if (index === -1) return content;
-  blocks.splice(index, 1);
-  const joined = blocks.filter((b) => b.length > 0).join("\n\n");
-  return joined ? `${joined}\n` : "";
-}
-
-/**
  * The undo for addMethod(): strips one method's mount line from
  * *.routes.<ext>, its defineRoute() export (plus any params/body/query
- * schema consts) from *.controller.<ext>, and its matching function from
- * *.services.<ext>. Identified by verb+path, the same pair addMethod()
- * itself refuses to let collide — not by name alone, since two different
- * verb/path pairs could theoretically end up with the same name checked
- * against different endpoints (name uniqueness is only enforced per
- * endpoint, not globally).
+ * schema consts) from *.controller.<ext>, and its matching function (plus
+ * its now-unused schema-type import, if any) from *.services.<ext>.
+ * Identified by verb+path, the same pair addMethod() itself refuses to let
+ * collide — not by name alone, since two different verb/path pairs could
+ * theoretically end up with the same name checked against different
+ * endpoints (name uniqueness is only enforced per endpoint, not globally).
+ *
+ * Every removal goes through ast-edit.ts's ts-morph helpers, which find
+ * each method's statements by their actual declared/exported name — the
+ * same uniqueness addMethod() enforces — rather than by which \n\n-
+ * delimited block of text they happen to sit in. That matters because
+ * parseRouteMethods() (used above to confirm the method exists) reads
+ * mount lines with a lenient regex that tolerates reformatting; the old
+ * text-block removal required an exact line match after that same
+ * reformatting and could silently fail to find anything to remove, leaving
+ * the controller/services files changed but the route still mounted.
  *
  * Removing the last method on an endpoint resets all three files back to
  * their blank, freshly-scaffolded shape (renderBlank*()) rather than
@@ -84,11 +78,15 @@ export async function removeMethod(
     return { route, root, removed: match };
   }
 
-  const expectedMountLine = routeMountLine(route, { verb, path, name, needsBody: false, needsQuery: false });
-
-  const newController = removeBlock(controllerContents, (block) => block.includes(`export const ${name} = defineRoute(`));
-  const newRoutes = removeBlock(routesContents, (block) => block.trim() === expectedMountLine);
-  const newServices = removeBlock(servicesContents, (block) => block.includes(`export async function ${name}(`));
+  const newController = editSource(controllerPath, controllerContents, (_project, sourceFile) => {
+    removeControllerMethod(sourceFile, name);
+  });
+  const newRoutes = editSource(routesPath, routesContents, (_project, sourceFile) => {
+    removeRouteMount(sourceFile, name);
+  });
+  const newServices = editSource(servicesPath, servicesContents, (_project, sourceFile) => {
+    removeServiceMethod(sourceFile, name);
+  });
 
   await Promise.all([
     writeFile(controllerPath, newController),
