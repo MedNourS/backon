@@ -36,6 +36,30 @@ export function parseRouteMethods(routesFileContents: string): EndpointMethod[] 
 }
 
 /**
+ * Whether a given method actually declared a body/query schema — read off
+ * whether *.controller.<ext> exports `<name>BodySchema`/`<name>QuerySchema`,
+ * since addMethod() only ever emits those consts when the method's own
+ * needsBody/needsQuery was true (see renderControllerMethod in
+ * templates/route.ts). Nothing else remembers those two booleans after the
+ * fact — this is how the "modify a method" flow prefills its confirm
+ * prompts with what the method already has, instead of defaulting both back
+ * to false every time.
+ */
+export async function detectMethodValidation(
+  route: string,
+  name: string,
+  cwd: string = process.cwd()
+): Promise<{ needsBody: boolean; needsQuery: boolean }> {
+  const { root, ext } = await detectProject(cwd);
+  const controllerPath = join(root, "src/endpoints", route, `${route}.controller.${ext}`);
+  const contents = await readFile(controllerPath, "utf-8");
+  return {
+    needsBody: contents.includes(`export const ${name}BodySchema`),
+    needsQuery: contents.includes(`export const ${name}QuerySchema`),
+  };
+}
+
+/**
  * Every endpoint currently mounted in src/endpoints/index.<ext>, with the
  * HTTP methods each one's own *.routes.<ext> file actually wires up right
  * now — the same "what's real on disk" read doctor.ts does, rather than

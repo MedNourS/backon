@@ -327,6 +327,12 @@ export function renderPackageJson(
     "remove-route": "bunx create-backon remove-route",
     "list-routes": "bunx create-backon list-routes",
     doctor: "bunx create-backon doctor",
+    // project: read-only overview (db status, endpoints, methods, doctor
+    // summary). server-config: the interactive manager for actually
+    // changing endpoints/methods — add/remove/modify, without needing to
+    // remember which of the individual subcommands above does what.
+    project: "bunx create-backon project",
+    "server-config": "bunx create-backon server-config",
     docs: `bun run scripts/generate-docs.${ext}`,
   };
   if (language === "typescript") {

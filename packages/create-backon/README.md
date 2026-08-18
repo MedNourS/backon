@@ -180,6 +180,45 @@ comes from hand-editing `index.ts`, deleting a route folder without using
 `doctor` only reports issues — it doesn't fix them — and exits non-zero if
 it finds any, so it's usable in a pre-commit hook or CI step.
 
+## Project overview
+
+```
+bun run project
+```
+
+or `bunx create-backon project`. Read-only, one shot — not a loop, nothing
+here writes to disk. Prints three things: the database driver actually wired
+up in `src/config/db.<ext>` and whether it has what it needs (a config
+check, not a live connection attempt — for Neon/Postgres that means
+`DATABASE_URL` is set in `.env`; SQLite is always "ready" since it falls
+back to `./dev.db`; "none" means no database is configured, which is also
+"ready"), the same per-endpoint, per-method dashboard `list-routes` shows,
+and a one-line doctor summary. Point of this command is answering "what's
+actually going on in this project" in one glance, without needing to
+remember which of `list-routes`/`doctor`/checking `.env` by hand to run.
+
+## Managing endpoints and methods interactively
+
+```
+bun run server-config
+```
+
+or `bunx create-backon server-config`. The interactive alternative to
+running `add-route`/`add-method`/`remove-route` individually — opens with
+the same endpoint dashboard `project` shows, then a menu: add a new
+endpoint, remove one, add a method, remove a method, or modify a method
+(change its path, name, or body/query validation in place — the one thing
+none of the standalone commands offer, since it's a checked
+remove-then-re-add rather than a new codegen path). Loops back to the menu
+after each action, re-reading the endpoint list fresh every time, until
+told to stop. `project` and `server-config` are deliberately two separate
+commands rather than one combined dashboard — "show me what's here" and
+"let me start changing things" are different intents, and an overview that
+can also accidentally edit something isn't actually a safe overview.
+`add-route`/`add-method`/`remove-route`/`list-routes`/`doctor` all keep
+working exactly as documented above; `server-config` is a wrapper around
+the same underlying logic, not a replacement for them.
+
 ## Generating API docs
 
 Every generated project includes a `docs` script:

@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { addMethod } from "../src/add-method";
 import { addRoute } from "../src/add-route";
 import { generateProject } from "../src/generate";
-import { formatEndpointsDashboard, listEndpointsWithMethods, parseRouteMethods } from "../src/route-methods";
+import {
+  detectMethodValidation,
+  formatEndpointsDashboard,
+  listEndpointsWithMethods,
+  parseRouteMethods,
+} from "../src/route-methods";
 
 const cleanupDirs: string[] = [];
 
@@ -80,5 +85,21 @@ describe("listEndpointsWithMethods / formatEndpointsDashboard", () => {
 
   it("shows a plain message with no endpoints at all", () => {
     expect(stripAnsi(formatEndpointsDashboard([]))).toContain("No endpoints yet");
+  });
+});
+
+describe("detectMethodValidation", () => {
+  it("reflects which schemas a method actually declared", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: ".", framework: "hono", language: "typescript", db: "none", routes: [], copyEnv: false },
+      cwd
+    );
+    await addRoute("users", root);
+    await addMethod("users", { verb: "get", path: "/", name: "list", needsBody: false, needsQuery: false }, root);
+    await addMethod("users", { verb: "post", path: "/", name: "create", needsBody: true, needsQuery: true }, root);
+
+    expect(await detectMethodValidation("users", "list", root)).toEqual({ needsBody: false, needsQuery: false });
+    expect(await detectMethodValidation("users", "create", root)).toEqual({ needsBody: true, needsQuery: true });
   });
 });

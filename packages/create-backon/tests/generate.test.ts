@@ -50,6 +50,8 @@ describe("generateProject", () => {
     expect(pkgJson.scripts["remove-route"]).toBe("bunx create-backon remove-route");
     expect(pkgJson.scripts["list-routes"]).toBe("bunx create-backon list-routes");
     expect(pkgJson.scripts.doctor).toBe("bunx create-backon doctor");
+    expect(pkgJson.scripts.project).toBe("bunx create-backon project");
+    expect(pkgJson.scripts["server-config"]).toBe("bunx create-backon server-config");
     expect(pkgJson.scripts.docs).toBe("bun run scripts/generate-docs.ts");
 
     // The docs script imports the app directly (not through index.ts), so it

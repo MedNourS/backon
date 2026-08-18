@@ -23,3 +23,13 @@ export function colorVerb(verb: HttpVerb): string {
 export function dim(text: string): string {
   return `\x1b[2m${text}${RESET}`;
 }
+
+/** Green — a status line that's actually fine (a DB driver with everything it needs, a clean doctor run). */
+export function ok(text: string): string {
+  return `\x1b[32m${text}${RESET}`;
+}
+
+/** Amber — a status line that needs attention, but isn't a hard failure. */
+export function warn(text: string): string {
+  return `\x1b[33m${text}${RESET}`;
+}

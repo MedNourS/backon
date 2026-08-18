@@ -1,6 +1,6 @@
 {
   "name": "create-backon",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "description": "Scaffolds a new backend project on backon — like `bun create vite@latest`, but for a consistent controller/routes/services backend layout. Runs via bunx/bun create or npx/npm create.",
   "license": "MIT",

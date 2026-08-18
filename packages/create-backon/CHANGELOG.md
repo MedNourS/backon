@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- Add `bun run project` — a read-only overview: which database driver `src/config/db.<ext>` is actually wired to and whether it has what it needs (config check only, no live connection attempted), every endpoint and the methods each one has, and a doctor summary. Nothing here writes to disk.
+- Add `bun run server-config` — an interactive menu wrapping add/remove for endpoints and methods (what `add-route`/`remove-route`/`add-method` already did, without needing to remember which subcommand does what), plus a new "modify a method" action neither of those offered on its own: change a method's path, name, or body/query validation in place. Loops until told to stop, re-reading the endpoint list after every change. Kept as a separate command from `project` on purpose — a read-only overview and an editor are different intents, and merging them risks an accidental edit from someone who only wanted to look.
+- Add `remove-method`'s underlying logic (`removeMethod()`, used by `server-config`'s "remove"/"modify" actions) — strips one method's mount line, controller export, and service function, identified by verb+path. Removing an endpoint's last method resets its three files back to their blank, freshly-scaffolded shape instead of leaving a dangling import behind.
+- Both new commands are also added to every newly generated project's `package.json` scripts (`bun run project`, `bun run server-config`) — existing projects can add the same two lines by hand, or re-run `add-route`/etc., which don't need them.
+
 ## 0.9.0
 
 - `create-backon` itself now runs via `npx create-backon`/`npm create backon`, not just `bunx`/`bun create` — the published `bin` is now a real `esbuild`-bundled `dist/cli.js` (Node-valid ESM, `#!/usr/bin/env node` shebang) instead of raw `src/cli.ts`, which only Bun could execute directly (Bun runs `.ts` natively; Node can't, and can't honor a `bun` shebang either). `bun create backon`/`bunx create-backon` still work exactly the same, unaffected — same bundle either way.
