@@ -28,16 +28,37 @@ describe("generateProject", () => {
     );
 
     expect(root).toBe(join(cwd, "my-api"));
-    expect(filesWritten.length).toBe(10);
+    expect(filesWritten.length).toBe(11);
 
     const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
-    expect(appTs).toContain('import { createApp } from "@mednours/backon"');
+    expect(appTs).toContain('import { createApp, serveApiDocs } from "@mednours/backon"');
+    // The live /docs route is wired up by default, mounted last so it sees
+    // every route already registered above it.
+    expect(appTs).toContain('serveApiDocs(app, "/docs", { title: "my-api" });');
 
     const dbTs = await readFile(join(root, "src/config/db.ts"), "utf-8");
     expect(dbTs).toContain("export const db = undefined;");
 
     // TypeScript mode gets a tsconfig, not a jsconfig.
     expect(await readFile(join(root, "tsconfig.json"), "utf-8")).toContain('"strict": true');
+
+    // package.json aliases the CLI's own project-management subcommands, so
+    // they're runnable as `bun run add-route users` from inside the project.
+    const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf-8"));
+    expect(pkgJson.scripts["add-route"]).toBe("bunx create-backon add-route");
+    expect(pkgJson.scripts["remove-route"]).toBe("bunx create-backon remove-route");
+    expect(pkgJson.scripts["list-routes"]).toBe("bunx create-backon list-routes");
+    expect(pkgJson.scripts.doctor).toBe("bunx create-backon doctor");
+    expect(pkgJson.scripts.docs).toBe("bun run scripts/generate-docs.ts");
+
+    // The docs script imports the app directly (not through index.ts), so it
+    // never starts a real server just to read the route table.
+    const generateDocs = await readFile(join(root, "scripts/generate-docs.ts"), "utf-8");
+    expect(generateDocs).toContain(
+      'import { generateOpenApiSpec, apiReferenceHtmlInline } from "@mednours/backon";'
+    );
+    expect(generateDocs).toContain('import { app } from "../src/app";');
+    expect(generateDocs).toContain('title: "my-api"');
   });
 
   it("writes controller/routes/services per route and wires endpoints/index.ts (hono)", async () => {
@@ -95,8 +116,9 @@ describe("generateProject", () => {
     );
 
     const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
-    expect(appTs).toContain('import { createApp } from "@mednours/backon/express"');
+    expect(appTs).toContain('import { createApp, serveApiDocs } from "@mednours/backon/express"');
     expect(appTs).toContain('app.use("/", endpoints);');
+    expect(appTs).toContain('serveApiDocs(app, "/docs", { title: "my-api" });');
 
     const controller = await readFile(join(root, "src/endpoints/telemetry/telemetry.controller.ts"), "utf-8");
     expect(controller).toContain('import { defineRoute } from "@mednours/backon/express"');
@@ -117,6 +139,11 @@ describe("generateProject", () => {
     expect(pkgJson.dependencies["compression"]).toBeTruthy();
     expect(pkgJson.dependencies["hono"]).toBeUndefined();
     expect(pkgJson.devDependencies["@types/express"]).toBeTruthy();
+
+    const generateDocs = await readFile(join(root, "scripts/generate-docs.ts"), "utf-8");
+    expect(generateDocs).toContain(
+      'import { generateOpenApiSpec, apiReferenceHtmlInline } from "@mednours/backon/express";'
+    );
   });
 
   it("generates a valid db.ts variant for each db choice", async () => {
@@ -149,6 +176,7 @@ describe("generateProject", () => {
     await readFile(join(root, "index.js"), "utf-8");
     await readFile(join(root, "src/app.js"), "utf-8");
     await readFile(join(root, "src/config/db.js"), "utf-8");
+    await readFile(join(root, "scripts/generate-docs.js"), "utf-8");
     await expect(readFile(join(root, "index.ts"), "utf-8")).rejects.toThrow();
 
     // jsconfig.json instead of tsconfig.json.
@@ -175,6 +203,7 @@ describe("generateProject", () => {
     expect(pkgJson.devDependencies.typescript).toBeUndefined();
     expect(pkgJson.scripts.typecheck).toBeUndefined();
     expect(pkgJson.scripts.dev).toBe("bun run --watch index.js");
+    expect(pkgJson.scripts.docs).toBe("bun run scripts/generate-docs.js");
   });
 
   it('scaffolds into the current directory when projectName is "."', async () => {
@@ -185,7 +214,7 @@ describe("generateProject", () => {
     );
 
     expect(root).toBe(cwd);
-    expect(filesWritten.length).toBe(10);
+    expect(filesWritten.length).toBe(11);
 
     // package.json's "name" falls back to the directory's own basename,
     // not the literal ".", since "." isn't a valid npm package name.
@@ -232,7 +261,7 @@ describe("generateProject", () => {
       { projectName: ".", framework: "hono", language: "typescript", db: "sqlite", routes: [], copyEnv: true },
       cwdWith
     );
-    expect(filesWritten.length).toBe(11); // one more than the copyEnv:false base skeleton
+    expect(filesWritten.length).toBe(12); // one more than the copyEnv:false base skeleton
     const env = await readFile(join(rootWith, ".env"), "utf-8");
     const envExample = await readFile(join(rootWith, ".env.example"), "utf-8");
     expect(env).toBe(envExample);

@@ -6,6 +6,7 @@ import {
   renderEndpointsIndex,
   renderEnvExample,
   renderExampleMiddleware,
+  renderGenerateDocsScript,
   renderIndexTs,
   renderJsconfig,
   renderPackageJson,
@@ -90,14 +91,15 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
       ? [join(root, "jsconfig.json"), renderJsconfig()]
       : [join(root, "tsconfig.json"), renderTsconfig()],
     [join(root, "README.md"), renderReadme(readmeAnswers)],
-    [join(root, ".gitignore"), "node_modules/\ndist/\n*.log\n.env\n.env.local\n"],
-    [join(root, `src/app.${ext}`), renderAppTs(answers.framework)],
+    [join(root, ".gitignore"), "node_modules/\ndist/\n*.log\n.env\n.env.local\nopenapi.json\ndocs.html\n"],
+    [join(root, `src/app.${ext}`), renderAppTs(packageName, answers.framework)],
     [join(root, `src/config/db.${ext}`), renderDbFile(answers.db)],
     [
       join(root, `src/middleware/example.middleware.${ext}`),
       renderExampleMiddleware(answers.framework, answers.language),
     ],
     [join(root, `src/endpoints/index.${ext}`), renderEndpointsIndex(answers.framework, answers.routes)],
+    [join(root, `scripts/generate-docs.${ext}`), renderGenerateDocsScript(packageName, answers.framework)],
   ];
 
   for (const route of answers.routes) {

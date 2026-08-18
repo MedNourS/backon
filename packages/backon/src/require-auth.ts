@@ -12,9 +12,10 @@ import { extractBearerToken, verifyJwt, type VerifyJwtOptions } from "./auth-cor
  * same as any other AppError.
  *
  * This is verification only: issuing tokens (login, signup, refresh
- * rotation, revocation) is left to you, since that's genuinely different
- * per project and baking in an opinion there risks being wrong for whatever
- * project actually uses it. Apply it per-route or per-group, not globally:
+ * rotation, revocation) is left to the consuming project, since that's
+ * genuinely different per project and baking in an opinion there risks
+ * being wrong for whatever project actually uses it. Apply it per-route or
+ * per-group, not globally:
  *
  *   protectedRoutes.use("*", requireAuth({ secret: process.env.JWT_SECRET! }));
  */

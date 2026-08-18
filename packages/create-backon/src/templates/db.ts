@@ -39,7 +39,7 @@ import { Pool } from "pg";
 // NOTE: this pooled connection is for local dev or a long-running server
 // (Docker, a VPS, Render, etc). It is NOT safe to use as-is on Vercel
 // serverless functions — each cold start can open a new connection until
-// you exhaust the database's connection limit. Use the "neon" db option
+// the database's connection limit is exhausted. Use the "neon" db option
 // instead for serverless deploys.
 
 if (!process.env.DATABASE_URL) {

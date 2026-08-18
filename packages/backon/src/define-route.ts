@@ -2,7 +2,7 @@ import type { ZodType } from "zod";
 import { AppError } from "./error";
 import type { BackonContext } from "./types";
 
-/** Zod schemas for the parts of a request worth validating. All optional — skip what you don't need. */
+/** Zod schemas for the parts of a request worth validating. All optional — skip whatever isn't needed. */
 export interface RouteSchema<B = undefined, Q = undefined, P = undefined> {
   body?: ZodType<B>;
   query?: ZodType<Q>;
@@ -20,15 +20,25 @@ export type RouteHandler<B, Q, P> = (
   data: RouteData<B, Q, P>
 ) => Response | Promise<Response>;
 
+/** A defineRoute()-wrapped handler, carrying its own schema for generateOpenApiSpec() to read back later. */
+export interface RouteHandlerFn {
+  (c: BackonContext): Promise<Response>;
+  __backonRouteSchema?: RouteSchema<unknown, unknown, unknown>;
+}
+
 /**
  * Wraps a handler with request validation against zod schemas. On failure,
  * throws AppError(400, ...) with the zod error attached as `details` —
  * createApp()'s error handler turns that into the standard error JSON shape,
  * so individual routes never write their own "if invalid, return 400" code.
  *
+ * The schema is also attached to the returned function as
+ * `__backonRouteSchema`, purely for generateOpenApiSpec() to read back —
+ * nothing about validation depends on it.
+ *
  * Usage in a *.controller.ts file:
  *
- *   export const getTelemetry = defineRoute(
+ *   const getTelemetry = defineRoute(
  *     { query: z.object({ deviceId: z.string() }) },
  *     async (c, { query }) => c.json({ deviceId: query.deviceId })
  *   );
@@ -36,8 +46,8 @@ export type RouteHandler<B, Q, P> = (
 export function defineRoute<B = undefined, Q = undefined, P = undefined>(
   schema: RouteSchema<B, Q, P>,
   handler: RouteHandler<B, Q, P>
-) {
-  return async (c: BackonContext): Promise<Response> => {
+): RouteHandlerFn {
+  const wrapped: RouteHandlerFn = async (c: BackonContext): Promise<Response> => {
     let body = undefined as B;
     let query = undefined as Q;
     let params = undefined as P;
@@ -71,4 +81,6 @@ export function defineRoute<B = undefined, Q = undefined, P = undefined>(
 
     return handler(c, { body, query, params });
   };
+  wrapped.__backonRouteSchema = schema as RouteSchema<unknown, unknown, unknown>;
+  return wrapped;
 }

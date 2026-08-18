@@ -20,7 +20,7 @@ export interface Env {
  * (the seam that would let an Express adapter produce the same shape) only
  * gets designed once that adapter is actually being built. Guessing at that
  * abstraction now, before a second implementation exists to validate it
- * against, is how you end up rebuilding it anyway. Until then, this alias
+ * against, tends to mean rebuilding it anyway. Until then, this alias
  * exists so call sites already say `BackonContext` instead of `Context`,
  * which is the only part that needs to stay stable.
  */

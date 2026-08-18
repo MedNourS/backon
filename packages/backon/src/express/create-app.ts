@@ -5,6 +5,7 @@ import compression from "compression";
 import { AppError } from "../error";
 import { logger } from "../logger";
 import { requestLogger } from "./logger";
+import { trackRoutes } from "./router-registry";
 
 export interface CreateAppOptions {
   /** Allowed CORS origins. Defaults to ALLOWED_ORIGINS env var (comma-separated), closed by default. */
@@ -31,16 +32,19 @@ function resolveAllowedOrigins(options: CreateAppOptions): string[] {
  * 4-argument signature and only lets it catch errors from routes/middleware
  * registered BEFORE it — the opposite of Hono's onError(), which is
  * registration-order-independent. If the error handler were added here,
- * inside createApp(), it would never see errors from the routes you add
- * afterward in your own app.ts, exactly the routes it exists to catch.
- * `serve()` calls attachErrorHandler() for you right before starting the
- * server, once all your routes are guaranteed to already be registered. If
- * you're not using backon's serve() — e.g. wrapping this app for a
- * serverless handler or a supertest suite — call attachErrorHandler(app)
- * yourself, after your routes, before you use the app.
+ * inside createApp(), it would never see errors from routes added
+ * afterward in the project's own app.ts, exactly the routes it exists to
+ * catch. `serve()` calls attachErrorHandler() automatically, right before
+ * starting the server, once every route is guaranteed to already be
+ * registered. When not using backon's serve() — e.g. wrapping this app for
+ * a serverless handler or a supertest suite — call attachErrorHandler(app)
+ * directly, after every route, before the app is used.
  */
 export function createApp(options: CreateAppOptions = {}): Express {
-  const app = express();
+  // Instrumented before anything else is registered, so every route this
+  // app (or a Router() mounted onto it) adds afterward — including /health
+  // below — is tracked for generateOpenApiSpec(). See router-registry.ts.
+  const app = trackRoutes(express());
 
   app.use(requestLogger);
   app.use(helmet());
@@ -51,9 +55,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(compression());
   app.use(express.json({ limit: options.bodyLimitBytes ?? DEFAULT_BODY_LIMIT_BYTES }));
 
-  // Same reasoning as the Hono version's /health: registered before your
-  // own middleware, so it gets logging/security/CORS/compression but not
-  // anything you add afterward. Right default for a liveness check.
+  // Same reasoning as the Hono version's /health: registered before any
+  // project-specific middleware, so it gets logging/security/CORS/compression
+  // but nothing added afterward. Right default for a liveness check.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });

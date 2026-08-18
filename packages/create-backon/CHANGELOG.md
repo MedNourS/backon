@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.2
+
+- Fix: the generated `src/app.ts`/`src/app.js` never actually called `serveApiDocs()`, so `/docs` 404'd on the dev server even though `bun run docs` (the static generator) worked fine — the two were never wired together. `serveApiDocs(app, "/docs", { title })` is now called by default, last, after every route is mounted, so both the live `/docs` page and the static `bun run docs` output are available out of the box.
+
+## 0.6.1
+
+- Fix: the generated `bun run docs` script wrote a `docs.html` that fetched `openapi.json` from a URL, which failed with Scalar's "Document could not be loaded" error when the file was opened directly (double-clicked, `file://`) rather than served over HTTP — a browser blocks one `file://` URL from fetching another. `docs.html` now embeds the spec directly via `@mednours/backon`'s new `apiReferenceHtmlInline()` (requires `@mednours/backon` 0.5.0 or later), so it works either way.
+
+## 0.6.0
+
+- Add a `docs` script to every generated project (`bun run docs`) — writes `openapi.json` and a rendered `docs.html` reference page to disk from the app's own routes, without starting a server. Backed by a new `scripts/generate-docs.<ext>` file that imports `src/app` directly and calls `generateOpenApiSpec()`/`apiReferenceHtml()` (requires `@mednours/backon` 0.4.0 or later, which exports `apiReferenceHtml`). `openapi.json` and `docs.html` are added to the generated `.gitignore` by default, as generated build output. `scripts/` is included in the generated `tsconfig.json`/`jsconfig.json` so `bun run typecheck` covers it too.
+
+## 0.5.0
+
+- Generated projects now get `add-route`, `remove-route`, `list-routes`, and `doctor` scripts in their own `package.json`, so `bun run add-route users` works from inside a project without remembering the full `bunx create-backon add-route users` invocation. `bun run` forwards extra arguments straight through with no `--` separator needed. The underlying `bunx create-backon <command>` form still works everywhere, including in projects scaffolded before this change.
+
 ## 0.4.0
 
 - Add `remove-route <name>` (alias `rm-route`) — the undo for `add-route`. Deletes the route's folder and unmounts it from `src/endpoints/index.<ext>`. Refuses if the route isn't currently mounted.

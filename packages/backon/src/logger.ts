@@ -5,8 +5,8 @@ import type { Env } from "./types";
 
 /**
  * Structured logger. pino instead of console.log because it's fast enough to
- * leave on in production and gives us structured (JSON) lines for free —
- * console.log output is not something you can query later.
+ * leave on in production and gives structured (JSON) lines for free —
+ * console.log output isn't queryable later, structured log lines are.
  */
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",

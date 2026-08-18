@@ -33,8 +33,8 @@ function resolveAllowedOrigins(options: CreateAppOptions): string[] {
  * that turns AppError (or anything else) into a consistent JSON shape.
  *
  * This is the "small opinionated helpers" layer agreed on for v1 — enough to
- * be worth having your own package instead of importing hono directly,
- * without trying to cover every possible use case up front.
+ * justify a dedicated package instead of importing hono directly, without
+ * trying to cover every possible use case up front.
  */
 export function createApp(options: CreateAppOptions = {}) {
   const app = new Hono<Env>();
@@ -59,14 +59,14 @@ export function createApp(options: CreateAppOptions = {}) {
 
   // Registered here, before createApp() returns, so it always gets the
   // middleware above (logging, secure headers, CORS, compression, body
-  // limit). It deliberately does NOT get middleware you add afterward in
-  // your own app.ts (app.use('*', yourMiddleware) only wraps routes
+  // limit). It deliberately does NOT get middleware added afterward in the
+  // project's own app.ts (app.use('*', someMiddleware) only wraps routes
   // registered after that call) — verified by hand, this is Hono's own
   // registration-order behavior, not something backon adds. That's the
   // right default for a liveness check: an uptime monitor shouldn't get
-  // blocked by app-specific middleware like auth. If you want /health
-  // behind your own middleware too, register your own route instead of
-  // relying on this one.
+  // blocked by app-specific middleware like auth. For /health behind its
+  // own middleware too, register a separate route instead of relying on
+  // this one.
   app.get("/health", (c) => c.json({ status: "ok" }));
 
   app.onError((err, c) => {

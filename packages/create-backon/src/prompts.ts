@@ -79,7 +79,7 @@ export async function runPrompts(): Promise<Answers> {
   if (p.isCancel(copyEnv)) bail();
 
   const routes: string[] = [];
-  p.log.step("Add routes one at a time. Leave the name blank when you're done.");
+  p.log.step("Add routes one at a time. Leave the name blank to finish.");
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const name = await p.text({

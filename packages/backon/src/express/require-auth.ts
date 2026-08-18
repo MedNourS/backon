@@ -9,10 +9,11 @@ import { extractBearerToken, verifyJwt, type VerifyJwtOptions } from "../auth-co
  * res.locals) or directly as `res.locals.auth` in plain Express middleware.
  * Calls next(AppError(401, "unauthorized")) on a missing, malformed, or
  * invalid token; requires attachErrorHandler(app) to be registered
- * downstream (serve() does this for you — see create-app.ts).
+ * downstream (serve() does this automatically — see create-app.ts).
  *
  * Verification only, same as the Hono version — issuing tokens is left to
- * you. Apply per-route or per-router, not necessarily globally.
+ * the consuming project. Apply per-route or per-router, not necessarily
+ * globally.
  */
 export function requireAuth(options: VerifyJwtOptions) {
   return async function requireAuthMiddleware(req: Request, res: Response, next: NextFunction) {

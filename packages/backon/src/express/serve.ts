@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { attachErrorHandler } from "./create-app";
+import { attachWebSockets } from "./websocket";
 import { logger } from "../logger";
 
 /**
@@ -7,9 +8,11 @@ import { logger } from "../logger";
  * wires graceful shutdown, same contract as the Hono adapter's serve().
  *
  * Also calls attachErrorHandler(app) first — see the note on createApp()
- * for why that can't happen until every route is registered. If you're not
+ * for why that can't happen until every route is registered. When not
  * using this serve() (e.g. exporting the app for a serverless platform or a
- * supertest suite), call attachErrorHandler(app) yourself instead.
+ * supertest suite), call attachErrorHandler(app) directly instead — and, if
+ * any defineWebSocket() routes were registered, attachWebSockets(app,
+ * server) too, once a real http.Server exists.
  */
 export function serve(app: Express, port: number = Number(process.env.PORT) || 3000) {
   attachErrorHandler(app);
@@ -17,6 +20,7 @@ export function serve(app: Express, port: number = Number(process.env.PORT) || 3
   const server = app.listen(port, () => {
     logger.info({ port }, "backon app listening");
   });
+  attachWebSockets(app, server);
 
   let shuttingDown = false;
   const shutdown = (signal: string) => {

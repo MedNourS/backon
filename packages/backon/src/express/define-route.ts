@@ -28,17 +28,27 @@ export type RouteHandler<B, Q, P> = (
   data: RouteData<B, Q, P>
 ) => unknown | Promise<unknown>;
 
+/** A defineRoute()-wrapped Express handler, carrying its own schema for generateOpenApiSpec() to read back later. */
+export interface RouteHandlerFn {
+  (req: Request, res: Response, next: NextFunction): Promise<void>;
+  __backonRouteSchema?: RouteSchema<unknown, unknown, unknown>;
+}
+
 /**
  * Same contract as the Hono defineRoute: validates body/query/params
  * against zod schemas and throws AppError(400, ...) on failure. Requires
  * createApp()'s express.json() middleware to have already run so
  * req.body is parsed — see create-app.ts.
+ *
+ * The schema is also attached to the returned function as
+ * `__backonRouteSchema`, purely for generateOpenApiSpec() to read back —
+ * nothing about validation depends on it.
  */
 export function defineRoute<B = undefined, Q = undefined, P = undefined>(
   schema: RouteSchema<B, Q, P>,
   handler: RouteHandler<B, Q, P>
-) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+): RouteHandlerFn {
+  const wrapped: RouteHandlerFn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       let body = undefined as B;
       let query = undefined as Q;
@@ -74,4 +84,6 @@ export function defineRoute<B = undefined, Q = undefined, P = undefined>(
       next(err);
     }
   };
+  wrapped.__backonRouteSchema = schema as RouteSchema<unknown, unknown, unknown>;
+  return wrapped;
 }

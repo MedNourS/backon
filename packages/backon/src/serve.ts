@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { websocket } from "hono/bun";
 import { logger } from "./logger";
 import type { Env } from "./types";
 
@@ -7,9 +8,13 @@ import type { Env } from "./types";
  * SIGTERM/SIGINT, stop accepting new connections, let in-flight requests
  * finish, then exit. Matters for zero-downtime deploys — without this, a
  * deploy or restart can cut off requests mid-flight.
+ *
+ * Also passes hono/bun's own websocket handler into Bun.serve() — needed
+ * for any defineWebSocket() route to actually complete its upgrade
+ * handshake, and harmless when there are none.
  */
 export function serve(app: Hono<Env>, port: number = Number(process.env.PORT) || 3000) {
-  const server = Bun.serve({ fetch: app.fetch, port });
+  const server = Bun.serve({ fetch: app.fetch, websocket, port });
   logger.info({ port }, "backon app listening");
 
   let shuttingDown = false;

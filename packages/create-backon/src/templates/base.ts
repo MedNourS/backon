@@ -19,9 +19,13 @@ serve(app);
 `;
 }
 
-export function renderAppTs(framework: Framework): string {
+// serveApiDocs() is called last, after every route is mounted — it reads
+// the route table as it stands at call time, so anything registered after
+// this line would be missing from /docs. Same live route this project's
+// bun run docs script generates a static copy of; see generate-docs.<ext>.
+export function renderAppTs(projectName: string, framework: Framework): string {
   if (framework === "express") {
-    return `import { createApp } from "@mednours/backon/express";
+    return `import { createApp, serveApiDocs } from "@mednours/backon/express";
 import { endpoints } from "./endpoints";
 import { exampleMiddleware } from "./middleware/example.middleware";
 
@@ -29,9 +33,11 @@ export const app = createApp();
 
 app.use(exampleMiddleware);
 app.use("/", endpoints);
+
+serveApiDocs(app, "/docs", { title: "${projectName}" });
 `;
   }
-  return `import { createApp } from "@mednours/backon";
+  return `import { createApp, serveApiDocs } from "@mednours/backon";
 import { endpoints } from "./endpoints";
 import { exampleMiddleware } from "./middleware/example.middleware";
 
@@ -39,6 +45,8 @@ export const app = createApp();
 
 app.use("*", exampleMiddleware);
 app.route("/", endpoints);
+
+serveApiDocs(app, "/docs", { title: "${projectName}" });
 `;
 }
 
@@ -49,8 +57,8 @@ export function renderExampleMiddleware(framework: Framework, language: Language
  * Example middleware, just to show the pattern — stamps a request-start
  * timestamp onto res.locals. Error handling, request logging, secure
  * headers, CORS, and the request body size limit are already wired into
- * createApp() by backon itself; you don't need your own
- * error.middleware.js unless you want to override that default behavior.
+ * createApp() by backon itself; a separate
+ * error.middleware.js is only needed to override that default behavior.
  *
  * This is plain Express middleware (req, res, next), not backon's
  * BackonContext — that wrapper only exists inside defineRoute() handlers.
@@ -75,8 +83,8 @@ export function exampleMiddleware(req, res, next) {
  * Example middleware, just to show the pattern — stamps a request-start
  * timestamp onto res.locals. Error handling, request logging, secure
  * headers, CORS, and the request body size limit are already wired into
- * createApp() by backon itself; you don't need your own
- * error.middleware.ts unless you want to override that default behavior.
+ * createApp() by backon itself; a separate
+ * error.middleware.ts is only needed to override that default behavior.
  *
  * This is plain Express middleware (req, res, next), not backon's
  * BackonContext — that wrapper only exists inside defineRoute() handlers.
@@ -97,8 +105,8 @@ export function exampleMiddleware(req: Request, res: Response, next: NextFunctio
  * Example middleware, just to show the pattern — adds a response-time
  * header. Error handling, request logging, secure headers, CORS, and the
  * request body size limit are already wired into createApp() by backon
- * itself; you don't need your own error.middleware.js unless you want to
- * override that default behavior.
+ * itself; a separate error.middleware.js is only needed to override that
+ * default behavior.
  *
  * @param {import("@mednours/backon").BackonContext} c
  * @param {import("@mednours/backon").Next} next
@@ -117,8 +125,8 @@ import type { BackonContext } from "@mednours/backon";
  * Example middleware, just to show the pattern — adds a response-time
  * header. Error handling, request logging, secure headers, CORS, and the
  * request body size limit are already wired into createApp() by backon
- * itself; you don't need your own error.middleware.ts unless you want to
- * override that default behavior.
+ * itself; a separate error.middleware.ts is only needed to override that
+ * default behavior.
  */
 export async function exampleMiddleware(c: BackonContext, next: Next) {
   const start = performance.now();
@@ -154,6 +162,31 @@ ${mounts}
 `;
 }
 
+// Not language-aware, same reasoning as renderIndexTs/renderAppTs above: no
+// type annotations, so the same content is valid JS or TS. Imports "../src/app"
+// rather than starting the server, so running this doesn't require anything
+// to be listening — generateOpenApiSpec() only needs the app's routes
+// registered, which happens at import time.
+//
+// docs.html embeds the spec directly (apiReferenceHtmlInline), rather than
+// pointing at ./openapi.json the way the live serveApiDocs() page does —
+// this file gets opened straight from disk as often as it's served over
+// HTTP, and a browser blocks one file:// URL from fetching another, so a
+// URL-based page would fail exactly there.
+export function renderGenerateDocsScript(projectName: string, framework: Framework): string {
+  const backonImport = framework === "express" ? "@mednours/backon/express" : "@mednours/backon";
+  return `import { writeFileSync } from "node:fs";
+import { generateOpenApiSpec, apiReferenceHtmlInline } from "${backonImport}";
+import { app } from "../src/app";
+
+const spec = generateOpenApiSpec(app, { title: "${projectName}", version: "0.1.0" });
+writeFileSync("openapi.json", JSON.stringify(spec, null, 2));
+writeFileSync("docs.html", apiReferenceHtmlInline(spec, "${projectName}"));
+
+console.log("Wrote openapi.json and docs.html");
+`;
+}
+
 export function renderEnvExample(db: Answers["db"]): string {
   return `PORT=3000
 ALLOWED_ORIGINS=
@@ -177,7 +210,7 @@ export function renderTsconfig(): string {
     "noEmit": true,
     "allowJs": false
   },
-  "include": ["index.ts", "src"]
+  "include": ["index.ts", "src", "scripts"]
 }
 `;
 }
@@ -200,7 +233,7 @@ export function renderJsconfig(): string {
     "checkJs": false,
     "allowJs": true
   },
-  "include": ["index.js", "src"]
+  "include": ["index.js", "src", "scripts"]
 }
 `;
 }
@@ -245,6 +278,16 @@ export function renderPackageJson(
     dev: `bun run --watch index.${ext}`,
     start: `bun run index.${ext}`,
     test: "bun test",
+    // Thin aliases over `bunx create-backon <subcommand>` — running
+    // `bun run add-route users` from inside the project is shorter than
+    // remembering the create-backon invocation, and bun forwards extra
+    // arguments (like the route name) straight through without needing
+    // a `--` separator.
+    "add-route": "bunx create-backon add-route",
+    "remove-route": "bunx create-backon remove-route",
+    "list-routes": "bunx create-backon list-routes",
+    doctor: "bunx create-backon doctor",
+    docs: `bun run scripts/generate-docs.${ext}`,
   };
   if (language === "typescript") {
     scripts.typecheck = "tsc --noEmit";
@@ -282,6 +325,10 @@ bun install
 cp .env.example .env   # fill in real values
 bun run dev
 \`\`\`
+
+Once running, \`http://localhost:3000/docs\` has a live API reference for
+every route added via \`defineRoute\` — \`bun run docs\` also writes the same
+document to \`openapi.json\`/\`docs.html\` on disk, for CI or static hosting.
 
 ## Database: ${answers.db}
 

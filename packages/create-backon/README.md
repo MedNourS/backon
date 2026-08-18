@@ -44,11 +44,11 @@ my-api/
 Each route's `*.routes.ts` wires HTTP methods to controller functions,
 `*.controller.ts` validates the request via `defineRoute` (from
 `@mednours/backon` or `@mednours/backon/express`, depending on the
-framework you picked) and calls into `*.services.ts`, which is where real
-data access belongs. In JavaScript mode every file is generated without any
+framework picked) and calls into `*.services.ts`, which is where real data
+access belongs. In JavaScript mode every file is generated without any
 TypeScript-only syntax (no `import type`, no generics, no type
-annotations) — it's not TypeScript with the types stripped, it's meant to
-be genuinely plain JavaScript, with JSDoc `@param` comments on the one
+annotations) — generated files are genuinely plain JavaScript rather than
+TypeScript with the types stripped, with JSDoc `@param` comments on the one
 generated function (the example middleware) that would otherwise have had
 a type annotation, so editors still get intellisense without requiring
 TypeScript as a dependency.
@@ -60,9 +60,23 @@ running this right after `git init` on a fresh repo doesn't get blocked.
 
 ## Adding a route to an existing project
 
-Re-running the full generator isn't the way to add one more route to a
-project you already scaffolded. Use the `add-route` subcommand instead,
-from inside the project:
+Re-running the full generator isn't the way to add one more route to an
+already-scaffolded project. Every generated project's `package.json`
+includes a script for this, so from inside the project:
+
+```
+bun run add-route users
+```
+
+`bun run` forwards `users` straight through, no `--` needed. Leave the name
+off and it prompts for one:
+
+```
+bun run add-route
+```
+
+The same command also works outside a generated `package.json`, or for a
+project scaffolded before this script existed:
 
 ```
 bunx create-backon add-route users
@@ -70,11 +84,8 @@ bunx create-backon add-route users
 
 (`bun create backon add-route users` also works — `bun create` forwards
 extra arguments straight through. `route` works as a shorthand for
-`add-route` either way.) Leave the name off and it'll prompt for one:
-
-```
-bunx create-backon add-route
-```
+`add-route` either way, and `bun run add-route` is exactly this command
+under a shorter name.)
 
 It reads the project's own `package.json` to figure out whether it's
 Hono or Express, TypeScript or JavaScript — no need to answer those again
@@ -90,11 +101,17 @@ name that's already mounted.
 The undo for `add-route`:
 
 ```
+bun run remove-route users
+```
+
+or directly:
+
+```
 bunx create-backon remove-route users
 ```
 
 (`rm-route` also works.) Leave the name off to be prompted for one. Either
-way you'll be asked to confirm before anything is deleted — this removes
+way, confirmation is required before anything is deleted — this removes
 `src/endpoints/users/` and unmounts it from `src/endpoints/index.ts`.
 Refuses if the route isn't currently mounted, rather than guessing at
 deleting a folder that was never wired up.
@@ -102,27 +119,50 @@ deleting a folder that was never wired up.
 ## Listing routes
 
 ```
-bunx create-backon list-routes
+bun run list-routes
 ```
 
-(`routes` also works.) Read-only — prints every route currently mounted in
-`src/endpoints/index.ts`.
+or `bunx create-backon list-routes` (`routes` also works). Read-only —
+prints every route currently mounted in `src/endpoints/index.ts`.
 
 ## Checking a project for drift
 
 ```
-bunx create-backon doctor
+bun run doctor
 ```
 
-Compares what's actually in `src/endpoints/` against what `index.<ext>`
-mounts, and flags three things: a route folder that exists but isn't
-mounted (an orphan), a mount in `index.<ext>` pointing at a folder that's
-gone (dangling), and a route folder missing one of its three expected
-files. This kind of drift usually comes from hand-editing `index.ts`,
-deleting a route folder without using `remove-route`, or copy-pasting a
-route folder without wiring it up. `doctor` only reports issues — it
-doesn't fix them — and exits non-zero if it finds any, so it's usable in
-a pre-commit hook or CI step.
+or `bunx create-backon doctor`. Compares what's actually in
+`src/endpoints/` against what `index.<ext>` mounts, and flags three things:
+a route folder that exists but isn't mounted (an orphan), a mount in
+`index.<ext>` pointing at a folder that's gone (dangling), and a route
+folder missing one of its three expected files. This kind of drift usually
+comes from hand-editing `index.ts`, deleting a route folder without using
+`remove-route`, or copy-pasting a route folder without wiring it up.
+`doctor` only reports issues — it doesn't fix them — and exits non-zero if
+it finds any, so it's usable in a pre-commit hook or CI step.
+
+## Generating API docs
+
+Every generated project includes a `docs` script:
+
+```
+bun run docs
+```
+
+Writes `openapi.json` (built from the Zod schemas already passed to
+`defineRoute()` across every route) and `docs.html` (a rendered reference
+page, [Scalar](https://github.com/scalar/scalar), pointed at that spec) to
+the project root. Both come from `scripts/generate-docs.<ext>`, generated
+alongside everything else — it imports `src/app` directly rather than
+starting a real server, so `bun run docs` works without anything listening
+on a port. Both output files are build artifacts, not source, so they're in
+the generated `.gitignore` by default.
+
+This is separate from `serveApiDocs(app)` (documented in
+[coding-with-backon.md](../../docs/coding-with-backon.md)), which mounts the
+same spec and reference page as live routes on a running server instead of
+writing them to disk — useful for CI, static hosting, or feeding the spec
+into an external tool, where `serveApiDocs`'s live routes don't apply.
 
 ## Requirements
 
