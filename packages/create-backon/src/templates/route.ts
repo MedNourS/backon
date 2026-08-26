@@ -177,9 +177,12 @@ export function serviceImports(route: string, spec: MethodSpec, language: Langua
 }
 
 export function renderServiceMethod(spec: MethodSpec, language: Language): string {
-  const ext = language === "javascript" ? "js" : "ts";
   const argList = language === "javascript" ? serviceCallArgs(spec).join(", ") : serviceParamList(spec);
-  return `// TODO: replace with real data access (see src/config/db.${ext})
+  // "#config/db" is a package.json subpath import (Node's `imports` field,
+  // which Bun also resolves) — points at src/config/db.<ext> regardless of
+  // how deep the importing file is, so this never turns into `../../config/db`
+  // as routes get nested. See the "Database" section of the generated README.
+  return `// TODO: replace with real data access — e.g. import { db } from "#config/db";
 export async function ${spec.name}(${argList}) {
   ${defaultServiceReturn(spec)}
 }`;

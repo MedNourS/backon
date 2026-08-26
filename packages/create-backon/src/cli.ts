@@ -7,6 +7,8 @@
 // first line. Local dev (`bun run src/cli.ts`, the "start" script) doesn't
 // need a shebang either; `bun run` executes the given file directly, it
 // doesn't rely on the OS reading a shebang the way `./cli.ts` would.
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as p from "@clack/prompts";
 import { runPrompts } from "./prompts";
 import { generateProject } from "./generate";
@@ -27,6 +29,8 @@ import {
   type EndpointSummary,
 } from "./route-methods";
 import { HTTP_VERBS, paramNamesFromPath, pascalCase, type HttpVerb, type MethodSpec } from "./templates/route";
+import { addTable, removeTable, parseSchemaTables, formatTablesDashboard, type ParsedTable } from "./schema-edit";
+import { COLUMN_TYPES, columnIdentifier, tableIdentifier, type ColumnSpec, type ColumnType, type TableSpec } from "./templates/schema";
 
 const ADD_ROUTE_SUBCOMMANDS = new Set(["add-route", "route"]);
 const REMOVE_ROUTE_SUBCOMMANDS = new Set(["remove-route", "rm-route"]);
@@ -44,6 +48,8 @@ const ADD_METHOD_SUBCOMMANDS = new Set(["add-method", "method"]);
 // wanted to look.
 const PROJECT_SUBCOMMANDS = new Set(["project"]);
 const SERVER_CONFIG_SUBCOMMANDS = new Set(["server-config"]);
+const ADD_TABLE_SUBCOMMANDS = new Set(["add-table", "table"]);
+const REMOVE_TABLE_SUBCOMMANDS = new Set(["remove-table", "rm-table"]);
 
 async function promptForRouteName(introText: string): Promise<string> {
   p.intro(introText);
@@ -160,6 +166,289 @@ async function runProjectOverview(): Promise<void> {
   }
 
   p.outro("Manage endpoints and methods with `bun run server-config`.");
+}
+
+// ---------------------------------------------------------------------------
+// add-table / remove-table / server-config's table actions — schema.ts's
+// interactive editor. Gated to "neon"/"postgres" (the only two db choices
+// schema.ts/drizzle.config.ts get scaffolded for — see templates/db.ts's
+// hasSchemaSupport field); SQLite and "none" fail with a clear message
+// rather than silently no-opping.
+// ---------------------------------------------------------------------------
+
+async function ensureSchemaSupport(): Promise<boolean> {
+  const status = await detectDbStatus();
+  if (status.driver === "neon" || status.driver === "postgres") return true;
+  p.log.error(
+    `Schema management needs a "neon" or "postgres" db driver (src/config/db reports "${status.driver}") — ` +
+      `SQLite and "none" use a different schema dialect (or none at all) and aren't supported here yet.`
+  );
+  return false;
+}
+
+async function readSchemaTables(): Promise<ParsedTable[]> {
+  const { root, ext } = await detectProject();
+  try {
+    const contents = await readFile(join(root, "src/config", `schema.${ext}`), "utf-8");
+    return parseSchemaTables(contents);
+  } catch {
+    return [];
+  }
+}
+
+/** Type-specific "does this column get a default?" question — returns a pre-rendered modifier fragment (see ColumnSpec.defaultExpr's doc comment), "" for none, or null if cancelled. */
+async function promptDefaultExpr(type: ColumnType): Promise<string | null> {
+  if (type === "timestamp") {
+    const v = await p.confirm({ message: "Default to now()?", initialValue: false });
+    if (p.isCancel(v)) return null;
+    return v ? ".defaultNow()" : "";
+  }
+  if (type === "uuid") {
+    const v = await p.confirm({ message: "Default to a random UUID?", initialValue: false });
+    if (p.isCancel(v)) return null;
+    return v ? ".defaultRandom()" : "";
+  }
+  if (type === "boolean") {
+    const v = await p.select({
+      message: "Default value",
+      options: [
+        { value: "none", label: "None" },
+        { value: "true", label: "true" },
+        { value: "false", label: "false" },
+      ],
+      initialValue: "none",
+    });
+    if (p.isCancel(v)) return null;
+    return v === "none" ? "" : `.default(${v})`;
+  }
+  // text / integer
+  const v = await p.text({
+    message: "Default value (blank for none)",
+    placeholder: type === "integer" ? "e.g. 0" : "e.g. pending",
+  });
+  if (p.isCancel(v)) return null;
+  if (!v) return "";
+  if (type === "integer") {
+    const n = Number(v);
+    if (Number.isNaN(n)) {
+      p.log.warn(`"${v}" isn't a number — skipping the default.`);
+      return "";
+    }
+    return `.default(${n})`;
+  }
+  return `.default(${JSON.stringify(v)})`;
+}
+
+/** Full column-collection loop for one table — stops on a blank column name, propagates a cancel as `null`. */
+async function promptForColumns(existingTables: ParsedTable[]): Promise<ColumnSpec[] | null> {
+  const columns: ColumnSpec[] = [];
+  p.log.step("Add columns one at a time. Leave the name blank to finish.");
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const nameProbe = await p.text({
+      message: columns.length === 0 ? "Column name" : "Another column? (blank to finish)",
+      placeholder: columns.length === 0 ? "e.g. email" : "",
+    });
+    if (p.isCancel(nameProbe)) return null;
+    if (!nameProbe) break;
+
+    const key = columnIdentifier(nameProbe);
+    if (columns.some((c) => columnIdentifier(c.name) === key)) {
+      p.log.error(`"${key}" is already a column on this table.`);
+      continue;
+    }
+
+    let references: string | undefined;
+    if (existingTables.length > 0) {
+      const refChoice = await p.select({
+        message: `Does "${nameProbe}" reference another table's id?`,
+        options: [
+          { value: "__none__", label: "No" },
+          ...existingTables.map((t) => ({ value: t.identifier, label: t.identifier })),
+        ],
+        initialValue: "__none__",
+      });
+      if (p.isCancel(refChoice)) return null;
+      if (refChoice !== "__none__") references = refChoice;
+    }
+
+    let type: ColumnType = "integer";
+    let defaultExpr = "";
+    if (!references) {
+      const typeChoice = await p.select({
+        message: "Column type",
+        options: COLUMN_TYPES.map((t) => ({ value: t, label: t })),
+      });
+      if (p.isCancel(typeChoice)) return null;
+      type = typeChoice;
+      const expr = await promptDefaultExpr(type);
+      if (expr === null) return null;
+      defaultExpr = expr;
+    }
+
+    const notNull = await p.confirm({ message: "Required (NOT NULL)?", initialValue: true });
+    if (p.isCancel(notNull)) return null;
+    const unique = await p.confirm({ message: "Unique?", initialValue: false });
+    if (p.isCancel(unique)) return null;
+
+    columns.push({ name: nameProbe, type, notNull, unique, defaultExpr, references });
+  }
+
+  return columns;
+}
+
+/** Full table-collection flow: name (unless `forcedName` came from a CLI arg), the id-column question, then promptForColumns(). Returns null on cancel. */
+async function collectTableSpec(existingTables: ParsedTable[], forcedName?: string): Promise<TableSpec | null> {
+  let name = forcedName;
+  if (name) {
+    const id = tableIdentifier(name);
+    if (existingTables.some((t) => t.identifier === id)) {
+      p.log.error(`"${id}" already exists.`);
+      return null;
+    }
+  } else {
+    const answer = await p.text({
+      message: "New table name",
+      placeholder: "e.g. users",
+      validate: (value) => {
+        if (!value) return "Required.";
+        if (existingTables.some((t) => t.identifier === tableIdentifier(value))) {
+          return `"${tableIdentifier(value)}" already exists.`;
+        }
+        return undefined;
+      },
+    });
+    if (p.isCancel(answer)) return null;
+    name = answer;
+  }
+
+  const includeId = await p.confirm({
+    message: "Add an auto-increment id primary key column?",
+    initialValue: true,
+  });
+  if (p.isCancel(includeId)) return null;
+
+  const columns = await promptForColumns(existingTables);
+  if (columns === null) return null;
+
+  return { name, includeId, columns };
+}
+
+async function runAddTable(args: string[]): Promise<void> {
+  p.intro("create-backon add-table");
+  if (!(await ensureSchemaSupport())) return;
+
+  const [forcedName] = args;
+  let existingTables = await readSchemaTables();
+  let first = true;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const spec = await collectTableSpec(existingTables, first ? forcedName : undefined);
+    first = false;
+    if (!spec) {
+      p.cancel("Cancelled.");
+      return;
+    }
+
+    try {
+      const { filePath, identifier } = await addTable(spec);
+      p.log.success(`Added table "${identifier}" to ${filePath}. Run \`bun run db:generate\` to create a migration for it.`);
+      existingTables = await readSchemaTables();
+    } catch (err) {
+      p.log.error(err instanceof Error ? err.message : String(err));
+    }
+
+    const again = await p.confirm({ message: "Add another table?", initialValue: false });
+    if (p.isCancel(again) || !again) break;
+  }
+
+  p.outro("Done.");
+}
+
+async function runRemoveTable(args: string[]): Promise<void> {
+  p.intro("create-backon remove-table");
+  if (!(await ensureSchemaSupport())) return;
+
+  const existingTables = await readSchemaTables();
+  if (existingTables.length === 0) {
+    p.log.info("No tables yet.");
+    return;
+  }
+
+  const [forcedName] = args;
+  let identifier: string;
+  if (forcedName) {
+    identifier = tableIdentifier(forcedName);
+    if (!existingTables.some((t) => t.identifier === identifier)) {
+      p.log.error(`No table "${identifier}" found.`);
+      return;
+    }
+  } else {
+    const choice = await p.select({
+      message: "Remove which table?",
+      options: existingTables.map((t) => ({ value: t.identifier, label: `${t.identifier} (${t.columns.length} columns)` })),
+    });
+    if (p.isCancel(choice)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+    identifier = choice;
+  }
+
+  const confirmed = await p.confirm({
+    message: `Remove table "${identifier}" from schema.ts? This only edits the file — nothing is dropped from the actual database until you run a migration.`,
+    initialValue: false,
+  });
+  if (p.isCancel(confirmed) || !confirmed) {
+    p.cancel("Cancelled.");
+    return;
+  }
+
+  try {
+    const { filePath } = await removeTable(identifier);
+    p.log.success(`Removed "${identifier}" from ${filePath}. Run \`bun run db:generate\` to create a migration for this change.`);
+  } catch (err) {
+    p.log.error(err instanceof Error ? err.message : String(err));
+  }
+
+  p.outro("Done.");
+}
+
+/** server-config's single-shot version of runAddTable() — no internal "add another?" loop, since runServerConfig()'s own while loop already re-shows state and re-prompts after every action. */
+async function serverConfigAddTable(existingTables: ParsedTable[]): Promise<void> {
+  const spec = await collectTableSpec(existingTables);
+  if (!spec) {
+    p.cancel("Cancelled.");
+    return;
+  }
+  const { filePath, identifier } = await addTable(spec);
+  p.log.success(`Added table "${identifier}" to ${filePath}. Run \`bun run db:generate\` next.`);
+}
+
+async function serverConfigRemoveTable(existingTables: ParsedTable[]): Promise<void> {
+  if (existingTables.length === 0) {
+    p.log.info("No tables yet.");
+    return;
+  }
+  const choice = await p.select({
+    message: "Remove which table?",
+    options: existingTables.map((t) => ({ value: t.identifier, label: `${t.identifier} (${t.columns.length} columns)` })),
+  });
+  if (p.isCancel(choice)) {
+    p.cancel("Cancelled.");
+    return;
+  }
+  const confirmed = await p.confirm({
+    message: `Remove table "${choice}" from schema.ts? Nothing is dropped from the actual database until you run a migration.`,
+    initialValue: false,
+  });
+  if (p.isCancel(confirmed) || !confirmed) {
+    p.cancel("Cancelled.");
+    return;
+  }
+  const { filePath } = await removeTable(choice);
+  p.log.success(`Removed "${choice}" from ${filePath}. Run \`bun run db:generate\` next.`);
 }
 
 function suggestMethodName(verb: HttpVerb, path: string): string {
@@ -569,6 +858,12 @@ async function runServerConfig(): Promise<void> {
     const summaries = await listEndpointsWithMethods();
     p.note(formatEndpointsDashboard(summaries), `Endpoints in ${root}`);
 
+    const dbStatus = await detectDbStatus();
+    const schemaCapable = dbStatus.driver === "neon" || dbStatus.driver === "postgres";
+    if (schemaCapable) {
+      p.note(formatTablesDashboard(await readSchemaTables()), "Database tables");
+    }
+
     const action = await p.select({
       message: "What do you want to do?",
       options: [
@@ -577,6 +872,8 @@ async function runServerConfig(): Promise<void> {
         { value: "add-method", label: "Add a method" },
         { value: "remove-method", label: "Remove a method" },
         { value: "modify-method", label: "Modify a method" },
+        { value: "add-table", label: "Add a database table" },
+        { value: "remove-table", label: "Remove a database table" },
         { value: "exit", label: "Exit" },
       ],
     });
@@ -598,6 +895,12 @@ async function runServerConfig(): Promise<void> {
           break;
         case "modify-method":
           await serverConfigModifyMethod(summaries);
+          break;
+        case "add-table":
+          if (await ensureSchemaSupport()) await serverConfigAddTable(await readSchemaTables());
+          break;
+        case "remove-table":
+          if (await ensureSchemaSupport()) await serverConfigRemoveTable(await readSchemaTables());
           break;
       }
     } catch (err) {
@@ -647,6 +950,14 @@ async function main() {
   }
   if (subcommand && SERVER_CONFIG_SUBCOMMANDS.has(subcommand)) {
     await runServerConfig();
+    return;
+  }
+  if (subcommand && ADD_TABLE_SUBCOMMANDS.has(subcommand)) {
+    await runAddTable(rest);
+    return;
+  }
+  if (subcommand && REMOVE_TABLE_SUBCOMMANDS.has(subcommand)) {
+    await runRemoveTable(rest);
     return;
   }
 

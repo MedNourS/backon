@@ -1,6 +1,6 @@
 import type { Answers, DeployTarget, Framework, Language } from "../prompts";
 import { camelCase } from "./route";
-import { dbDependencies, dbEnvVars, dbReadmeNote } from "./db";
+import { dbDependencies, dbDevDependencies, dbEnvVars, dbHasSchemaSupport, dbReadmeNote, dbTypeOnlyDevDependencies } from "./db";
 
 // renderIndexTs/renderAppTs/renderEndpointsIndex are intentionally NOT
 // language-aware: none of them contain TypeScript-only syntax (no type
@@ -500,13 +500,26 @@ export function renderPackageJson(
 
   // JavaScript mode intentionally has zero TypeScript-related devDependencies
   // (no `typescript`, no `@types/*`) — there's nothing being compiled or
-  // typechecked, so pulling those in would just be dead weight.
+  // typechecked, so pulling those in would just be dead weight. drizzle-kit
+  // is a CLI tool driven by schema.ts's shape, not by language, so it's
+  // merged in either way via dbDevDependencies(db).
   const devDependencies: Record<string, string> =
     language === "javascript"
-      ? {}
+      ? { ...dbDevDependencies(db) }
       : framework === "express"
-        ? { "@types/bun": "latest", "@types/express": "^4.17.21", typescript: "^5.7.2" }
-        : { "@types/bun": "latest", typescript: "^5.7.2" };
+        ? {
+            "@types/bun": "latest",
+            "@types/express": "^4.17.21",
+            typescript: "^5.7.2",
+            ...dbDevDependencies(db),
+            ...dbTypeOnlyDevDependencies(db),
+          }
+        : {
+            "@types/bun": "latest",
+            typescript: "^5.7.2",
+            ...dbDevDependencies(db),
+            ...dbTypeOnlyDevDependencies(db),
+          };
 
   const scripts: Record<string, string> = {
     dev: `bun run --watch index.${ext}`,
@@ -538,12 +551,33 @@ export function renderPackageJson(
   if (language === "typescript") {
     scripts.typecheck = "tsc --noEmit";
   }
+  if (dbHasSchemaSupport(db)) {
+    // add-table/remove-table: thin aliases matching the add-route/add-method
+    // pattern above. db:generate/db:migrate/db:push call drizzle-kit
+    // directly (not create-backon) — schema.ts is a real drizzle-kit
+    // config target, no wrapper needed.
+    scripts["add-table"] = "bunx create-backon add-table";
+    scripts["remove-table"] = "bunx create-backon remove-table";
+    scripts["db:generate"] = "drizzle-kit generate";
+    scripts["db:migrate"] = "drizzle-kit migrate";
+    scripts["db:push"] = "drizzle-kit push";
+  }
 
   const pkg = {
     name: projectName,
     version: "0.1.0",
     private: true,
     type: "module",
+    // Node's package.json subpath imports (Bun resolves these too, both
+    // locally and on Vercel's Bun runtime — no bundler-specific config
+    // needed, unlike a tsconfig "paths" alias). Lets any file import the db
+    // client as `import { db } from "#config/db"` regardless of how deep
+    // it's nested under src/endpoints/, instead of a depth-counted
+    // `../../config/db`. Verified against a real `bun run` and a real
+    // `tsc --noEmit` (moduleResolution: "bundler" already resolves it).
+    imports: {
+      "#config/*": `./src/config/*.${ext}`,
+    },
     scripts,
     dependencies,
     devDependencies,
@@ -594,6 +628,29 @@ both for free.
   }
 }
 
+function renderSchemaReadmeSection(ext: string): string {
+  return `
+### Table schema
+
+\`src/config/schema.${ext}\` holds every table (empty until you add one — see below). \`bun run
+add-table\`/\`bun run remove-table\` (also reachable from \`server-config\`'s menu) edit it for you —
+picking a column type, nullability, uniqueness, a default, and whether it references another
+table's \`id\`. This only ever edits \`schema.${ext}\` on disk; it never touches the actual database.
+
+To apply a schema change for real:
+
+\`\`\`
+bun run db:generate   # writes a reviewable .sql migration under drizzle/ — no DB connection needed
+bun run db:migrate    # applies pending migrations to DATABASE_URL
+\`\`\`
+
+\`bun run db:push\` applies \`schema.${ext}\` straight to the database with no migration file — faster
+to iterate with early on (empty/throwaway dev database), but skips the reviewable, versioned trail
+\`generate\`/\`migrate\` gives you. Switch to \`generate\`/\`migrate\` once there's real data, or before
+deploying anywhere with staging/prod.
+`;
+}
+
 export function renderReadme(answers: Answers): string {
   const routeList = answers.routes.length
     ? answers.routes.map((route) => `- \`src/endpoints/${route}/\``).join("\n")
@@ -623,6 +680,11 @@ document to \`openapi.json\`/\`docs.html\` on disk, for CI or static hosting.
 
 ${dbReadmeNote(answers.db)}
 
+Import the client from anywhere as \`import { db } from "#config/db";\` — a package.json subpath
+import (\`imports\`), not a relative path, so it stays \`#config/db\` no matter how deeply nested the
+importing file is under \`src/endpoints/\`. Bun resolves it the same way locally and on Vercel;
+\`tsc --noEmit\` resolves it too, no extra tsconfig needed.
+${dbHasSchemaSupport(answers.db) ? renderSchemaReadmeSection(ext) : ""}
 ## Routes
 
 ${routeList}

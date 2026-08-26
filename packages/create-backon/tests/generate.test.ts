@@ -187,6 +187,39 @@ describe("generateProject", () => {
     }
   });
 
+  it("gives a TypeScript postgres project @types/pg (regression: tsc --noEmit failed with TS7016 without it)", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: "my-api", framework: "hono", language: "typescript", db: "postgres", routes: [], copyEnv: false },
+      cwd
+    );
+    const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf-8"));
+    expect(pkgJson.devDependencies["@types/pg"]).toBeTruthy();
+  });
+
+  it("does NOT give a JavaScript postgres project @types/pg (JS mode stays free of TS-only devDependencies)", async () => {
+    const cwd = await makeTmpDir();
+    const { root } = await generateProject(
+      { projectName: "my-api", framework: "hono", language: "javascript", db: "postgres", routes: [], copyEnv: false },
+      cwd
+    );
+    const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf-8"));
+    expect(pkgJson.devDependencies["@types/pg"]).toBeUndefined();
+    expect(pkgJson.devDependencies["drizzle-kit"]).toBeTruthy();
+  });
+
+  it("does not give neon/sqlite/none any @types/pg (only postgres needs it)", async () => {
+    for (const db of ["neon", "sqlite", "none"] as const) {
+      const cwd = await makeTmpDir();
+      const { root } = await generateProject(
+        { projectName: "my-api", framework: "hono", language: "typescript", db, routes: [], copyEnv: false },
+        cwd
+      );
+      const pkgJson = JSON.parse(await readFile(join(root, "package.json"), "utf-8"));
+      expect(pkgJson.devDependencies["@types/pg"]).toBeUndefined();
+    }
+  });
+
   it("generates plain JavaScript with no TypeScript-only syntax when language is javascript", async () => {
     const cwd = await makeTmpDir();
     const { root } = await generateProject(

@@ -16,7 +16,8 @@ import {
   renderVercelJson,
 } from "./templates/base";
 import { renderBlankController, renderBlankRoutes, renderBlankServices } from "./templates/route";
-import { renderDbFile } from "./templates/db";
+import { dbHasSchemaSupport, renderDbFile } from "./templates/db";
+import { renderBlankSchema, renderDrizzleConfig } from "./templates/schema";
 
 async function write(path: string, contents: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
@@ -101,6 +102,12 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     ],
     [join(root, `src/app.${ext}`), renderAppTs(packageName, answers.framework, answers.deployTarget)],
     [join(root, `src/config/db.${ext}`), renderDbFile(answers.db)],
+    ...(dbHasSchemaSupport(answers.db)
+      ? ([
+          [join(root, `src/config/schema.${ext}`), renderBlankSchema()],
+          [join(root, "drizzle.config.ts"), renderDrizzleConfig(ext)],
+        ] as Array<[string, string]>)
+      : []),
     [
       join(root, `src/middleware/example.middleware.${ext}`),
       renderExampleMiddleware(answers.framework, answers.language),

@@ -237,7 +237,54 @@ commands rather than one combined dashboard — "show me what's here" and
 can also accidentally edit something isn't actually a safe overview.
 `add-route`/`add-method`/`remove-route`/`list-routes`/`doctor` all keep
 working exactly as documented above; `server-config` is a wrapper around
-the same underlying logic, not a replacement for them.
+the same underlying logic, not a replacement for them. On a `neon`/`postgres`
+project, the same menu also has "Add a database table"/"Remove a database
+table" — see the next section.
+
+## Managing the database schema
+
+Only for the `neon`/`postgres` db choices — both speak the same Postgres
+schema dialect (`drizzle-orm/pg-core`), which is what makes one implementation
+cover both. SQLite uses different column builders entirely and isn't
+supported here yet; `add-table`/`remove-table` refuse with a clear message
+on a `sqlite`/`none` project rather than doing something wrong silently.
+
+```
+bun run add-table
+```
+
+or `bunx create-backon add-table` (`table` also works, and a name can be
+passed as an argument: `add-table users`). Walks through a table name, an
+"add an auto-increment id primary key column?" question, and then columns
+one at a time — name, type (`text`/`integer`/`boolean`/`timestamp`/`uuid`),
+required/unique, and a type-appropriate default (`.defaultNow()` for
+timestamps, `.defaultRandom()` for uuid, a literal for text/integer/boolean).
+A column can also reference another table's `id` instead of picking a type —
+rendered as the idiomatic `integer(...).references(() => otherTable.id)`
+pattern. Loops to "add another table?" until told to stop.
+
+Every call only edits `src/config/schema.<ext>` — appending a real
+`pgTable(...)` export and merging into the shared `drizzle-orm/pg-core`
+import rather than duplicating it. **Nothing here ever touches the actual
+database** — `bun run db:generate`/`db:migrate`/`db:push` (from
+drizzle-kit, wired into every `neon`/`postgres` project's `package.json`)
+are separate, explicit commands you run yourself when ready. See the
+generated README's "Table schema" section for the `generate`+`migrate` vs.
+`push` tradeoff.
+
+`bun run remove-table` (`rm-table` also works) is the undo: picks a table,
+confirms, removes its `pgTable(...)` export, and prunes any `pg-core`
+builder nothing else in the file still uses. Refuses to remove a table
+another table's column still references — leaving that in place would
+compile fine but throw a real `ReferenceError` the moment drizzle-kit or
+`db.query` tried to resolve it, so this is caught here instead. Removing
+the last table resets `schema.<ext>` to its blank, freshly-scaffolded
+stub, matching how `remove-method` resets a route's files when its last
+method goes.
+
+Both are also in `server-config`'s menu (see above), single-shot rather
+than their own standalone "add another?" loop — `server-config`'s own
+loop already re-shows state and re-prompts after every action.
 
 ## Generating API docs
 
