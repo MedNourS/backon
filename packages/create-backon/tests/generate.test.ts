@@ -339,6 +339,12 @@ describe("generateProject", () => {
 
     const vercelJson = JSON.parse(await readFile(join(root, "vercel.json"), "utf-8"));
     expect(vercelJson.bunVersion).toBe("1.x");
+    // Explicit "framework" pin — regression: without this, a real deployed
+    // project (createApp() from @mednours/backon, never `hono` imported
+    // directly in any entry file) failed Vercel's zero-config Hono
+    // auto-detection and got served as a raw static file instead of run as
+    // a function. Confirmed live, not assumed.
+    expect(vercelJson.framework).toBe("hono");
 
     const gitignore = await readFile(join(root, ".gitignore"), "utf-8");
     expect(gitignore).toContain(".vercel");
@@ -364,6 +370,9 @@ describe("generateProject", () => {
     );
     const appTs = await readFile(join(root, "src/app.ts"), "utf-8");
     expect(appTs).toContain("export default app;");
+
+    const vercelJson = JSON.parse(await readFile(join(root, "vercel.json"), "utf-8"));
+    expect(vercelJson.framework).toBe("express");
   });
 
   it("skips the default export and vercel.json for every non-vercel deployTarget, including unset", async () => {

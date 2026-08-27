@@ -116,7 +116,7 @@ export async function generateProject(answers: Answers, cwd: string = process.cw
     [join(root, `scripts/generate-docs.${ext}`), renderGenerateDocsScript(packageName, answers.framework)],
     [join(root, `scripts/generate-client.${ext}`), renderGenerateClientScript(answers.language)],
     ...(answers.deployTarget === "vercel"
-      ? ([[join(root, "vercel.json"), renderVercelJson()]] as Array<[string, string]>)
+      ? ([[join(root, "vercel.json"), renderVercelJson(answers.framework)]] as Array<[string, string]>)
       : []),
   ];
 

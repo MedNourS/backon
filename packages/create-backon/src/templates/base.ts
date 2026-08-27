@@ -78,12 +78,28 @@ ${defaultExport}`;
 // the deployed function on (currently "1.x" is the only valid value; minor/
 // patch are managed by Vercel automatically) — kept in sync with this
 // being a Bun-first framework, so the deployed function behaves the same
-// runtime as local dev. Not required for the zero-config Hono/Express
-// detection itself (that works on Vercel's default Node runtime too), but
-// there's no reason to switch runtimes between local and deployed.
-export function renderVercelJson(): string {
+// runtime as local dev.
+//
+// `framework` explicitly pins Vercel's Framework Preset to "hono"/"express"
+// (both valid slugs — checked against openapi.vercel.sh/vercel.json's own
+// schema, not guessed) instead of leaving it to auto-detection. This is not
+// optional: a real deployed project — src/app.ts importing createApp() from
+// @mednours/backon, never `hono` directly — was confirmed live to fail
+// Vercel's zero-config Hono auto-detect. It fell back to Project Settings
+// showing Framework Preset "Other" and serving src/index.ts as a raw static
+// file (content-type video/mp2t, the .ts-extension misdetection) instead of
+// running it as a function — a real request against the deployed URL
+// returned the literal unexecuted source of index.ts, not a response from
+// the app. Because backon's whole point is wrapping `new Hono()`/
+// `express()` behind createApp(), no entry file this CLI generates will ever
+// contain a literal top-level `from "hono"`/`from "express"` import for a
+// content-sniffing detector to find — so auto-detection can't be relied on
+// for any backon-based project, and this override is the fix, not a
+// workaround for one broken app.
+export function renderVercelJson(framework: Framework): string {
   return `{
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "${framework}",
   "bunVersion": "1.x"
 }
 `;
@@ -594,9 +610,15 @@ function renderDeploySection(deployTarget: DeployTarget | undefined, ext: string
 Set up for [Vercel](https://vercel.com)'s zero-config Hono/Express support:
 \`src/app.${ext}\` has a default export (Vercel deploys straight from it,
 bypassing \`index.${ext}\`/\`serve()\` — those keep working locally exactly as
-before), and \`vercel.json\` pins the Bun runtime so the deployed function
-matches local dev. Connect the repo on [vercel.com/new](https://vercel.com/new)
-or run \`vercel deploy\` — no other configuration needed. \`vercel dev\` runs it
+before). \`vercel.json\` pins the Bun runtime so the deployed function matches
+local dev, and explicitly sets \`"framework"\` to \`"hono"\`/\`"express"\` — not
+just cosmetic: Vercel's auto-detection for this looks for a file that
+imports \`hono\`/\`express\` directly, which nothing generated here ever does
+(everything goes through \`createApp()\` from \`@mednours/backon\` instead), so
+without this pin Vercel falls back to Framework Preset "Other" and serves
+\`index.${ext}\`'s raw source as a static file instead of running your app.
+Connect the repo on [vercel.com/new](https://vercel.com/new) or run
+\`vercel deploy\` — no other configuration needed. \`vercel dev\` runs it
 locally the same way it'll run once deployed.
 `;
     case "node":
