@@ -48,8 +48,28 @@ export default app;
 `
       : "";
 
+  // Vercel's zero-config Hono/Express builder doesn't just need a default
+  // export in the right file — it statically scans app.<ext>/index.<ext>/
+  // server.<ext> for a literal `import ... from "hono"` (or "express") and
+  // refuses to build without one ("Error: No entrypoint found which imports
+  // hono", confirmed against a real failed build). createApp() wraps that
+  // import inside @mednours/backon, so without this the scan finds nothing
+  // no matter how correct the app itself is — this line exists only to be
+  // found, nothing here calls it. Not needed (and left out) for any
+  // non-vercel deployTarget.
+  const detectionImport =
+    deployTarget === "vercel"
+      ? framework === "express"
+        ? `// Vercel's build scans for this import to detect an Express app — see vercel.json.
+import "express";
+`
+        : `// Vercel's build scans for this import to detect a Hono app — see vercel.json.
+import "hono";
+`
+      : "";
+
   if (framework === "express") {
-    return `import { createApp, serveApiDocs } from "@mednours/backon/express";
+    return `${detectionImport}import { createApp, serveApiDocs } from "@mednours/backon/express";
 import { endpoints } from "./endpoints";
 import { exampleMiddleware } from "./middleware/example.middleware";
 
@@ -61,7 +81,7 @@ app.use("/", endpoints);
 serveApiDocs(app, "/docs", { title: "${projectName}" });
 ${defaultExport}`;
   }
-  return `import { createApp, serveApiDocs } from "@mednours/backon";
+  return `${detectionImport}import { createApp, serveApiDocs } from "@mednours/backon";
 import { endpoints } from "./endpoints";
 import { exampleMiddleware } from "./middleware/example.middleware";
 

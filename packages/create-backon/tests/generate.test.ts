@@ -345,6 +345,12 @@ describe("generateProject", () => {
     // auto-detection and got served as a raw static file instead of run as
     // a function. Confirmed live, not assumed.
     expect(vercelJson.framework).toBe("hono");
+    // Regression: even with "framework": "hono" pinned, a real Vercel build
+    // failed with "Error: No entrypoint found which imports hono" — the
+    // framework pin alone wasn't enough, the build itself statically scans
+    // for a literal hono import in the entry file. Confirmed against a real
+    // failed build, not assumed.
+    expect(appTs).toContain('import "hono"');
 
     const gitignore = await readFile(join(root, ".gitignore"), "utf-8");
     expect(gitignore).toContain(".vercel");
@@ -373,6 +379,7 @@ describe("generateProject", () => {
 
     const vercelJson = JSON.parse(await readFile(join(root, "vercel.json"), "utf-8"));
     expect(vercelJson.framework).toBe("express");
+    expect(appTs).toContain('import "express"');
   });
 
   it("skips the default export and vercel.json for every non-vercel deployTarget, including unset", async () => {
