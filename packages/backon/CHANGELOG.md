@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1
+
+**Fix:** a real production deployment on Vercel (Bun runtime) crashed on every single request with `ResolveMessage {}` / `Cannot find module '@mednours/backon'`, even though `bun install` reported the package installed successfully at build time and the build itself succeeded. Root-caused via a live bisection against Vercel's own infrastructure (a series of minimal preview deployments, comparing what worked against what crashed): Vercel's Bun function bundler resolves this package's `"bun"` export condition (added in 0.7.0) to `./src/index.ts` — a raw TypeScript source file inside `node_modules` — fails to trace/bundle it correctly, and silently omits the entire package from the deployed Lambda. Confirmed directly: deploying a vendored copy of 0.7.0 with only the `"bun"` condition stripped out fixed the crash; the unmodified 0.7.0 package reproduced it every time.
+
+- Removed the `"bun"` export condition from both `.` and `./express` exports. Bun consumers now resolve to the same `dist/index.js` Node consumers use (already shipped, already tested locally — see 0.7.0) instead of straight to TypeScript source. This costs Bun users nothing at runtime (the built output behaves identically) and removes the one code path that broke under Vercel's bundler.
+
 ## 0.7.0
 
 **Breaking:** `serve(app)` (Hono adapter) is now `async` — `await` it. The Express adapter's `serve()` is unaffected, still synchronous.

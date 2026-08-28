@@ -1,6 +1,6 @@
 {
   "name": "@mednours/backon",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "description": "Opinionated backend framework wrapper, Bun-first but Node-compatible. Wraps Hono (default) or Express (via @mednours/backon/express) with the same baked-in security, logging, and validation defaults.",
   "license": "MIT",
@@ -23,17 +23,18 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./express": {
-      "bun": "./src/express/index.ts",
       "types": "./dist/express/index.d.ts",
       "default": "./dist/express/index.js"
     }
   },
-  "files": ["src", "dist"],
+  "files": [
+    "src",
+    "dist"
+  ],
   "scripts": {
     "dev": "bun run --watch examples/dev-server.ts",
     "dev:express": "bun run --watch examples/dev-server-express.ts",
